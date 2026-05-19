@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RPR 过滤策略 A/B 实验 · 数据回收与评估工具</title>
+<title>RPR 过滤策略 A/B/C/D 实验 · 多广告位数据回收与评估工具</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
@@ -11,7 +11,7 @@
     background: #f4f6fb; color: #2c3e50; line-height: 1.55; font-size: 14px;
   }
   body { padding: 16px 24px 60px; }
-  .container { max-width: 1480px; margin: 0 auto; }
+  .container { max-width: 1640px; margin: 0 auto; }
 
   header.app-head {
     background: linear-gradient(120deg, #2b6cb0 0%, #4f8edc 100%);
@@ -23,11 +23,23 @@
 
   .toolbar {
     display: flex; gap: 8px; flex-wrap: wrap; background: #fff;
-    padding: 10px 12px; border-radius: 10px; margin-bottom: 14px;
+    padding: 10px 12px; border-radius: 10px; margin-bottom: 12px;
     box-shadow: 0 2px 8px rgba(0,0,0,.04); align-items: center;
   }
   .toolbar .spacer { flex: 1 1 auto; }
   .save-state { font-size: 12px; color: #718096; }
+
+  .expbar {
+    display: flex; gap: 8px; flex-wrap: wrap; background: #fff;
+    padding: 10px 12px; border-radius: 10px; margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.04); align-items: center;
+  }
+  .expbar label { font-size: 12.5px; font-weight: 600; color: #4a5568; }
+  .expbar select {
+    padding: 7px 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 13.5px;
+    min-width: 280px; background: #fff; color: #2d3748;
+  }
+  .expbar .count-badge { font-size: 12px; color: #718096; background:#edf2f7; padding:3px 9px; border-radius:10px; }
 
   .tabs {
     display: flex; flex-wrap: wrap; gap: 6px; background: #fff;
@@ -52,14 +64,13 @@
   .hint.warn { border-left-color: #ed8936; background: #fffaf0; }
 
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; }
-  .grid3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
-  @media(max-width: 900px){ .grid2,.grid3{ grid-template-columns:1fr; } }
+  @media(max-width: 900px){ .grid2{ grid-template-columns:1fr; } }
   .field label { display: block; font-size: 12.5px; color: #4a5568; font-weight: 600; margin-bottom: 4px; }
   .field input, .field textarea {
     width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13.5px; background: #fff;
   }
   .field input:focus, .field textarea:focus { outline: none; border-color: #4f8edc; box-shadow: 0 0 0 2px rgba(79,142,220,.15); }
-  .field textarea { resize: vertical; min-height: 60px; }
+  .field textarea { resize: vertical; min-height: 56px; }
 
   .btn {
     display: inline-flex; align-items: center; gap: 4px; padding: 8px 15px; border-radius: 6px; border: none;
@@ -73,44 +84,50 @@
   .btn-sm { padding: 5px 11px; font-size: 12px; }
 
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  table th, table td { padding: 8px 9px; text-align: center; border: 1px solid #edf0f5; }
+  table th, table td { padding: 7px 8px; text-align: center; border: 1px solid #edf0f5; }
   table th { background: #f7fafc; font-weight: 600; color: #4a5568; }
-  table td.metric-name { text-align: left; font-weight: 600; color: #2d3748; background: #fbfcfe; }
+  table td.metric-name { text-align: left; font-weight: 600; color: #2d3748; background: #fbfcfe; white-space:nowrap; }
   table td input {
-    width: 100%; padding: 5px 6px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 13px; text-align: right;
+    width: 100%; min-width: 78px; padding: 5px 6px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 13px; text-align: right;
   }
   table td input:focus { outline: none; border-color: #4f8edc; }
-  td.calc { background: #f0f7ff; font-weight: 600; color: #2b6cb0; font-variant-numeric: tabular-nums; }
+  td.calc { background: #f0f7ff; font-weight: 600; color: #2b6cb0; font-variant-numeric: tabular-nums; white-space:nowrap; }
   td.calc.muted { background: #f7fafc; color: #718096; font-weight: 500; }
+  .grp-A { background:#f7fafc !important; }
+  .grp-B { background:#eef6ff !important; }
+  .grp-C { background:#fff3e8 !important; }
+  .grp-D { background:#f0fbf3 !important; }
   .table-wrap { overflow-x: auto; border: 1px solid #edf0f5; border-radius: 6px; }
   .dir { font-size: 11px; padding: 1px 6px; border-radius: 8px; font-weight: 600; display: inline-block; }
   .dir.up { background: #c6f6d5; color: #22543d; }
   .dir.down { background: #bee3f8; color: #2a4365; }
   .dir.flat { background: #edf2f7; color: #4a5568; }
+  .vsa { display:block; font-size:11px; margin-top:2px; font-weight:600; }
 
-  .row-actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+  .row-actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; align-items:center; }
 
   .verdict-card {
-    border-radius: 10px; padding: 18px 20px; margin-top: 16px; border: 2px solid #e2e8f0; background: #f7fafc;
+    border-radius: 10px; padding: 16px 18px; margin-top: 14px; border: 2px solid #e2e8f0; background: #f7fafc;
   }
   .verdict-card.A { border-color: #38a169; background: #f0fff4; }
   .verdict-card.B { border-color: #3182ce; background: #ebf8ff; }
   .verdict-card.C { border-color: #e53e3e; background: #fff5f5; }
   .verdict-card.none { border-color: #cbd5e0; }
-  .verdict-card h3 { margin: 0 0 8px; color: inherit; }
-  .verdict-tag { display: inline-block; padding: 4px 12px; border-radius: 14px; font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+  .verdict-card h3 { margin: 0 0 6px; color: inherit; }
+  .verdict-tag { display: inline-block; padding: 3px 11px; border-radius: 14px; font-size: 12.5px; font-weight: 700; margin-bottom: 8px; }
   .verdict-tag.A { background: #38a169; color: #fff; }
   .verdict-tag.B { background: #3182ce; color: #fff; }
   .verdict-tag.C { background: #e53e3e; color: #fff; }
   .verdict-tag.none { background: #a0aec0; color: #fff; }
-  .verdict-card ul { margin: 8px 0 0 18px; font-size: 13px; }
-  .verdict-card li { margin-bottom: 4px; }
+  .verdict-card ul { margin: 6px 0 0 18px; font-size: 13px; }
+  .verdict-card li { margin-bottom: 3px; }
+  .reco { background:#fffbea; border:1px solid #f6e05e; border-radius:8px; padding:12px 16px; margin-top:14px; font-size:13.5px; }
 
   .kpi-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin: 14px 0; }
   @media(max-width: 900px){ .kpi-row{ grid-template-columns:1fr 1fr; } }
   .kpi { background: #f7fafc; border-radius: 8px; padding: 12px 14px; border: 1px solid #edf0f5; }
   .kpi .k-label { font-size: 12px; color: #718096; margin-bottom: 4px; }
-  .kpi .k-val { font-size: 19px; font-weight: 700; color: #2b6cb0; font-variant-numeric: tabular-nums; }
+  .kpi .k-val { font-size: 18px; font-weight: 700; color: #2b6cb0; font-variant-numeric: tabular-nums; }
   .kpi .k-sub { font-size: 11.5px; margin-top: 3px; }
   .pos { color: #2f855a; } .neg { color: #c53030; } .neu { color: #718096; }
 
@@ -118,7 +135,7 @@
 
   @media print {
     body { padding: 0; background: #fff; }
-    .toolbar, .tabs, .row-actions, .no-print { display: none !important; }
+    .toolbar, .tabs, .expbar, .row-actions, .no-print { display: none !important; }
     section.panel { display: block !important; box-shadow: none; page-break-inside: avoid; }
     header.app-head { box-shadow: none; }
   }
@@ -127,97 +144,98 @@
 <body>
 <div class="container">
   <header class="app-head">
-    <h1>RPR 过滤策略小范围 A/B 实验 · 数据回收与评估工具</h1>
-    <p>核心逻辑：算力成本看 SDK 侧（绝对值），长期红利看大盘趋势（前后对比）。组别维度数据务必取自聚合平台 SDK 侧自建统计。</p>
+    <h1>RPR 过滤策略 A/B/C/D 实验 · 多广告位数据回收与评估工具</h1>
+    <p>支持多广告位实验并行管理；分组 A=对照(不干预)，B/C/D=策略变体。核心逻辑：算力成本看 SDK 侧绝对值，长期红利看大盘趋势。组别数据务必取自聚合平台 SDK 侧自建统计。</p>
   </header>
 
   <div class="toolbar">
-    <button class="btn btn-success" onclick="exportJSON()">⬇ 导出数据(JSON备份)</button>
-    <button class="btn btn-ghost" onclick="document.getElementById('importFile').click()">⬆ 导入数据</button>
+    <button class="btn btn-success" onclick="exportJSON()">⬇ 导出全部(JSON备份)</button>
+    <button class="btn btn-ghost" onclick="document.getElementById('importFile').click()">⬆ 导入JSON(批量)</button>
     <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importJSON(this)">
+    <button class="btn btn-ghost" onclick="document.getElementById('importCsv').click()">⬆ 批量导入CSV</button>
+    <input type="file" id="importCsv" accept=".csv" style="display:none" onchange="importCSV(this)">
+    <button class="btn btn-ghost btn-sm" onclick="downloadCsvTemplate()">CSV模板</button>
     <button class="btn btn-ghost" onclick="exportCSV()">⬇ 导出明细CSV</button>
-    <button class="btn btn-primary" onclick="window.print()">🖨 打印 / 存PDF</button>
+    <button class="btn btn-primary" onclick="window.print()">🖨 打印/PDF</button>
     <div class="spacer"></div>
     <span class="save-state" id="saveState">数据自动保存在本浏览器</span>
     <button class="btn btn-danger btn-sm" onclick="clearAll()">清空全部</button>
   </div>
 
+  <div class="expbar">
+    <label>当前广告位实验：</label>
+    <select id="expSelect" onchange="switchExp(this.value)"></select>
+    <span class="count-badge" id="expCount"></span>
+    <div class="spacer"></div>
+    <button class="btn btn-primary btn-sm" onclick="newExp()">＋ 新建实验</button>
+    <button class="btn btn-ghost btn-sm" onclick="dupExp()">复制当前</button>
+    <button class="btn btn-danger btn-sm" onclick="delExp()">删除当前</button>
+  </div>
+
   <div class="tabs">
     <button class="tab-btn active" data-tab="info">① 实验信息登记</button>
-    <button class="tab-btn" data-tab="core">② 核心数据回收（SDK侧）</button>
+    <button class="tab-btn" data-tab="core">② 核心数据回收（SDK侧·ABCD）</button>
     <button class="tab-btn" data-tab="spill">③ 大盘溢出效应对比</button>
     <button class="tab-btn" data-tab="verdict">④ 结论判定矩阵</button>
   </div>
 
   <!-- ① 实验信息 -->
   <section class="panel active" id="tab-info">
-    <h2>一、实验基本信息登记</h2>
+    <h2>一、实验基本信息登记（当前广告位）</h2>
     <div class="grid2">
       <div class="field"><label>实验名称</label><input id="i_name" placeholder="如：生活服务类 Android 插屏 RPR 过滤探测实验"></div>
       <div class="field"><label>实验广告位 Placement_ID</label><input id="i_placement" placeholder="Placement_ID_XXXX"></div>
       <div class="field"><label>底层共用广告源 Unit ID</label><input id="i_unit" placeholder="ca-app-pub-xxx (AdMob Unit)"></div>
-      <div class="field"><label>流量分流比例</label><input id="i_split" placeholder="对照组 A:50% | 实验组 B:50%（设备级随机）"></div>
+      <div class="field"><label>流量分流比例</label><input id="i_split" placeholder="A:25% | B:25% | C:25% | D:25%（设备级随机）"></div>
       <div class="field"><label>实验观察周期 · 开始</label><input id="i_start" type="date"></div>
       <div class="field"><label>实验观察周期 · 结束</label><input id="i_end" type="date"></div>
       <div class="field"><label>策略参数 Base_Rate</label><input id="i_baserate" placeholder="如：20%"></div>
       <div class="field"><label>策略参数 T（过滤护栏阈值）</label><input id="i_T" placeholder="如：大盘中位数"></div>
-      <div class="field" style="grid-column:1/-1"><label>备注 / 词表版本 / 其它说明</label><textarea id="i_note" placeholder="记录当前激活的过滤护栏公式、词表版本、风险点等"></textarea></div>
+      <div class="field"><label>A 组策略说明（对照）</label><input id="i_lblA" placeholder="不干预 · 对照组"></div>
+      <div class="field"><label>B 组策略说明</label><input id="i_lblB" placeholder="如：RPR过滤 Base_Rate=20%"></div>
+      <div class="field"><label>C 组策略说明</label><input id="i_lblC" placeholder="如：RPR过滤 Base_Rate=10%"></div>
+      <div class="field"><label>D 组策略说明</label><input id="i_lblD" placeholder="如：RPR过滤 + 词表v2"></div>
+      <div class="field" style="grid-column:1/-1"><label>备注 / 词表版本 / 风险点</label><textarea id="i_note" placeholder="记录当前激活的过滤护栏公式、词表版本、风险点等"></textarea></div>
     </div>
-    <div class="hint">建议观察周期至少覆盖两个完整自然周（≥14天）。A 组 = 不干预对照；B 组 = RPR 过滤策略。</div>
+    <div class="hint">观察周期建议 ≥14 天（覆盖两个完整自然周）。A 组固定为不干预对照，B/C/D 为不同策略/参数变体；只填用到的组即可，留空组不参与评估。</div>
   </section>
 
   <!-- ② 核心数据回收 -->
   <section class="panel" id="tab-core">
     <h2>二、核心数据回收表（核心看板 · SDK 侧归因）</h2>
-    <div class="hint warn">⚠️ 组别维度（A/B 组）数据<strong>必须全部取自聚合平台 SDK 侧自建统计</strong>，不能看广告平台后台。下方仅需录入 4 个原始指标（请求/填充/展示/预估收益），其余比率指标自动计算。</div>
+    <div class="hint warn">⚠️ 组别维度（A/B/C/D）数据<strong>必须全部取自聚合平台 SDK 侧自建统计</strong>，不能看广告平台后台。每天每组录入 4 个原始值（请求/填充/展示/预估收益），其余指标自动计算。</div>
 
     <div class="row-actions">
       <button class="btn btn-primary btn-sm" onclick="addDay()">＋ 新增一天</button>
-      <button class="btn btn-ghost btn-sm" onclick="genDaysFromPeriod()">按实验周期批量生成日期行</button>
-      <span class="save-state" style="align-self:center">逐日录入后，下方“周期汇总”自动计算 VPM / IPM / eCPM / 展示率</span>
+      <button class="btn btn-ghost btn-sm" onclick="genDaysFromPeriod()">按周期批量生成日期行</button>
+      <span class="save-state">逐日录入后，下方“周期汇总”自动计算 展示率 / VPM / IPM / SDK eCPM，并标注 B/C/D vs A</span>
     </div>
 
     <div class="table-wrap">
       <table id="dailyTable">
         <thead>
-          <tr>
-            <th rowspan="2">日期</th>
-            <th colspan="4">对照组 A（不干预）</th>
-            <th colspan="4">实验组 B（RPR过滤）</th>
-            <th rowspan="2" class="no-print">操作</th>
-          </tr>
-          <tr>
-            <th>请求 Req</th><th>填充 Fill</th><th>展示 Imp</th><th>预估收益 Rev</th>
-            <th>请求 Req</th><th>填充 Fill</th><th>展示 Imp</th><th>预估收益 Rev</th>
-          </tr>
+          <tr id="dailyHead1"></tr>
+          <tr id="dailyHead2"></tr>
         </thead>
         <tbody id="dailyBody"></tbody>
-        <tfoot>
-          <tr style="font-weight:700;background:#eef4fb">
-            <td class="metric-name">周期合计</td>
-            <td class="calc" id="sum_ra"></td><td class="calc" id="sum_fa"></td><td class="calc" id="sum_ia"></td><td class="calc" id="sum_va"></td>
-            <td class="calc" id="sum_rb"></td><td class="calc" id="sum_fb"></td><td class="calc" id="sum_ib"></td><td class="calc" id="sum_vb"></td>
-            <td class="no-print"></td>
-          </tr>
-        </tfoot>
+        <tfoot><tr id="dailyFoot" style="font-weight:700;background:#eef4fb"></tr></tfoot>
       </table>
     </div>
 
     <h3>周期汇总评估表（自动计算）</h3>
     <div class="table-wrap">
       <table id="summaryTable">
-        <thead>
-          <tr><th style="text-align:left">观测指标（SDK 侧归因）</th><th>对照组 A</th><th>实验组 B</th><th>预期方向</th><th>实际(B vs A)</th><th>业务结论 / 佐证</th></tr>
-        </thead>
+        <thead><tr id="summaryHead"></tr></thead>
         <tbody id="summaryBody"></tbody>
       </table>
     </div>
+    <div class="hint">B/C/D 单元格下方小字为相对 A 组的变化（绿=向好 / 红=向坏 / 灰=未达 5% 显著阈值）。</div>
   </section>
 
   <!-- ③ 大盘溢出 -->
   <section class="panel" id="tab-spill">
-    <h2>三、"外在溢出效应" 大盘前后对比表</h2>
-    <div class="hint">验证 B 组过滤垃圾流量后，是否帮共用 Unit ID 在广告平台侧"养好账号信用分"。观察该 Unit ID 大盘整体的时间序列演变（实验前 vs 实验后 A+B 混跑）。</div>
+    <h2>三、"外在溢出效应" 大盘前后对比表（当前广告位 Unit）</h2>
+    <div class="hint">验证过滤垃圾流量后，是否帮共用 Unit ID 在广告平台侧"养好账号信用分"。观察该 Unit ID 大盘整体（A+B+C+D 混跑）实验前 vs 实验后的演变。</div>
     <div class="table-wrap">
       <table id="spillTable">
         <thead>
@@ -263,45 +281,47 @@
 
   <!-- ④ 结论判定 -->
   <section class="panel" id="tab-verdict">
-    <h2>四、实验结论判定矩阵（运营决策 SOP）</h2>
-    <div class="kpi-row">
-      <div class="kpi"><div class="k-label">VPM_A（千次请求收益）</div><div class="k-val" id="kpi_vpma">—</div></div>
-      <div class="kpi"><div class="k-label">VPM_B（千次请求收益）</div><div class="k-val" id="kpi_vpmb">—</div><div class="k-sub" id="kpi_vpm_delta"></div></div>
-      <div class="kpi"><div class="k-label">大盘总收益 前 / 后</div><div class="k-val" id="kpi_rev">—</div><div class="k-sub" id="kpi_rev_delta"></div></div>
-      <div class="kpi"><div class="k-label">大盘总请求 变化</div><div class="k-val" id="kpi_req">—</div><div class="k-sub" id="kpi_req_delta"></div></div>
-    </div>
-
+    <h2>四、实验结论判定矩阵（运营决策 SOP · 当前广告位）</h2>
+    <div class="kpi-row" id="kpiRow"></div>
     <div id="verdictBox"></div>
+    <div id="recoBox"></div>
 
-    <h3>四象限决策参考</h3>
+    <h3>四象限决策参考（每个变体组 B/C/D 各自 vs A 对照）</h3>
     <div class="table-wrap">
       <table>
         <thead><tr><th>情况</th><th>数据表现</th><th>业务结论与下阶段决策</th></tr></thead>
         <tbody>
-          <tr><td><strong style="color:#2f855a">A 完美通关</strong></td><td style="text-align:left">VPM_B &gt; VPM_A 且 大盘总收益 post &gt; pre</td><td style="text-align:left">内部榨干请求效率 + 大盘溢价，盘子变大。<strong>逐步扩大灰度比例。</strong></td></tr>
-          <tr><td><strong style="color:#3182ce">B 防守成功</strong></td><td style="text-align:left">VPM_B &gt; VPM_A 且 大盘总收益持平，但总请求下降约30%</td><td style="text-align:left">收益持平但算力/带宽大幅节省，收益质量变高。<strong>符合战略预期，可全量。</strong></td></tr>
-          <tr><td><strong style="color:#c53030">C 误杀现金牛</strong></td><td style="text-align:left">VPM_B 与 A 拉不开差距，且大盘总收益 post 下跌</td><td style="text-align:left">过滤过激触发恶性循环或词表不准。<strong>立刻人工熔断，调高 Base_Rate 兜底或退回回测重校准词表。</strong></td></tr>
+          <tr><td><strong style="color:#2f855a">A 完美通关</strong></td><td style="text-align:left">VPM_变体 &gt; VPM_A 且 大盘总收益 post &gt; pre</td><td style="text-align:left">内部榨干请求效率 + 大盘溢价，盘子变大。<strong>逐步扩大该变体灰度比例。</strong></td></tr>
+          <tr><td><strong style="color:#3182ce">B 防守成功</strong></td><td style="text-align:left">VPM_变体 &gt; VPM_A 且 大盘总收益持平，但总请求下降约30%</td><td style="text-align:left">收益持平但算力/带宽大幅节省，收益质量变高。<strong>符合战略预期，可全量。</strong></td></tr>
+          <tr><td><strong style="color:#c53030">C 误杀现金牛</strong></td><td style="text-align:left">VPM_变体 与 A 拉不开差距，且大盘总收益 post 下跌</td><td style="text-align:left">过滤过激触发恶性循环或词表不准。<strong>立刻人工熔断，调高 Base_Rate 兜底或退回回测重校准词表。</strong></td></tr>
         </tbody>
       </table>
     </div>
-    <div class="hint">判定为自动启发式建议，最终需结合显著性检验与业务判断。"显著"阈值默认相对差异 ≥5%，可在源码 <code>SIG</code> 常量调整。</div>
+    <div class="hint">判定为自动启发式建议（大盘溢出为 A+B+C+D 混跑，各变体共享同一组大盘前后对比）。"显著"阈值默认相对差异 ≥5%，可在源码 <code>SIG</code> 常量调整。最终需结合显著性检验与业务判断。</div>
   </section>
 
-  <footer>RPR 过滤策略 A/B 实验数据回收工具 · 数据仅保存在本地浏览器，导出 JSON 可备份/交接 · 通过 Claude Code 修改源码后重新部署即可更新分享链接</footer>
+  <footer>RPR 过滤策略 A/B/C/D 多广告位实验数据回收工具 · 数据仅保存在本地浏览器，导出 JSON 可批量备份/交接 · 通过 Claude Code 修改源码后重新部署即可更新分享链接</footer>
 </div>
 
 <script>
-const LS_KEY = "rpr_ab_experiment_v1";
-const SIG = 0.05; // 显著性相对差异阈值（5%）
-
-let state = { info:{}, days:[], spill:{} };
-
-const INFO_FIELDS = ["i_name","i_placement","i_unit","i_split","i_start","i_end","i_baserate","i_T","i_note"];
+const LS_KEY = "rpr_ab_experiment_v2";
+const LS_KEY_OLD = "rpr_ab_experiment_v1";
+const SIG = 0.05;
+const GROUPS = ["A","B","C","D"];
+const GROUP_DESC = {A:"对照(不干预)",B:"变体B",C:"变体C",D:"变体D"};
+const VARIANTS = ["B","C","D"];
+const INFO_FIELDS = ["i_name","i_placement","i_unit","i_split","i_start","i_end","i_baserate","i_T","i_lblA","i_lblB","i_lblC","i_lblD","i_note"];
 const SPILL_FIELDS = ["sp_req_pre","sp_req_post","sp_fill_pre","sp_fill_post","sp_ecpm_pre","sp_ecpm_post","sp_rev_pre","sp_rev_post"];
 
-function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
-function fmt(n, d=0){ if(!isFinite(n)) return "—"; return n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d}); }
-function pct(n, d=2){ if(!isFinite(n)) return "—"; return (n*100).toFixed(d)+"%"; }
+let state = { experiments:[], activeId:null };
+
+function num(v){ const n=parseFloat(v); return isNaN(n)?0:n; }
+function fmt(n,d=0){ if(!isFinite(n)) return "—"; return n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function pct(n,d=2){ if(!isFinite(n)) return "—"; return (n*100).toFixed(d)+"%"; }
+function uid(){ return "exp_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function blankDay(date){ const d={date:date||""}; GROUPS.forEach(g=> d[g]={r:"",f:"",i:"",v:""}); return d; }
+function blankExp(name){ return { id:uid(), info:{ i_name:name||"" }, days:[], spill:{} }; }
+function activeExp(){ return state.experiments.find(e=>e.id===state.activeId); }
 
 /* ---------- tabs ---------- */
 document.querySelectorAll(".tab-btn").forEach(b=>{
@@ -313,105 +333,160 @@ document.querySelectorAll(".tab-btn").forEach(b=>{
   };
 });
 
-/* ---------- daily rows ---------- */
-function dayRowHTML(d, idx){
-  const f = (k)=> d[k]!=null ? d[k] : "";
-  return `<tr data-idx="${idx}">
-    <td><input type="date" value="${f('date')}" oninput="upd(${idx},'date',this.value)" style="text-align:center"></td>
-    <td><input type="number" value="${f('ra')}" oninput="upd(${idx},'ra',this.value)"></td>
-    <td><input type="number" value="${f('fa')}" oninput="upd(${idx},'fa',this.value)"></td>
-    <td><input type="number" value="${f('ia')}" oninput="upd(${idx},'ia',this.value)"></td>
-    <td><input type="number" value="${f('va')}" step="0.01" oninput="upd(${idx},'va',this.value)"></td>
-    <td><input type="number" value="${f('rb')}" oninput="upd(${idx},'rb',this.value)"></td>
-    <td><input type="number" value="${f('fb')}" oninput="upd(${idx},'fb',this.value)"></td>
-    <td><input type="number" value="${f('ib')}" oninput="upd(${idx},'ib',this.value)"></td>
-    <td><input type="number" value="${f('vb')}" step="0.01" oninput="upd(${idx},'vb',this.value)"></td>
-    <td class="no-print"><button class="btn btn-danger btn-sm" onclick="delDay(${idx})">删</button></td>
-  </tr>`;
+/* ---------- experiment manager ---------- */
+function expLabel(e){ const i=e.info||{}; return (i.i_name||"").trim() || (i.i_placement||"").trim() || "未命名实验"; }
+function renderExpSelect(){
+  const sel=document.getElementById("expSelect");
+  sel.innerHTML = state.experiments.map(e=>`<option value="${e.id}" ${e.id===state.activeId?"selected":""}>${expLabel(e)}</option>`).join("");
+  document.getElementById("expCount").textContent = `共 ${state.experiments.length} 个广告位实验`;
+}
+function loadExpToForm(){
+  const e=activeExp(); if(!e) return;
+  INFO_FIELDS.forEach(id=> document.getElementById(id).value = (e.info&&e.info[id]!=null)?e.info[id]:"");
+  SPILL_FIELDS.forEach(id=> document.getElementById(id).value = (e.spill&&e.spill[id]!=null)?e.spill[id]:"");
+  renderDays(); recalc();
+}
+function switchExp(id){ collectActive(); state.activeId=id; save(false); loadExpToForm(); renderExpSelect(); }
+function newExp(){
+  collectActive();
+  const e=blankExp("新广告位实验 "+(state.experiments.length+1));
+  state.experiments.push(e); state.activeId=e.id;
+  save(false); renderExpSelect(); loadExpToForm();
+}
+function dupExp(){
+  collectActive();
+  const cur=activeExp(); if(!cur){ return; }
+  const copy=JSON.parse(JSON.stringify(cur));
+  copy.id=uid(); copy.info=copy.info||{}; copy.info.i_name=(expLabel(cur))+" (副本)";
+  state.experiments.push(copy); state.activeId=copy.id;
+  save(false); renderExpSelect(); loadExpToForm();
+}
+function delExp(){
+  const e=activeExp(); if(!e) return;
+  if(!confirm(`确认删除实验「${expLabel(e)}」？该广告位全部录入数据将被清除，不可恢复。`)) return;
+  state.experiments=state.experiments.filter(x=>x.id!==e.id);
+  if(!state.experiments.length) state.experiments.push(blankExp("新广告位实验 1"));
+  state.activeId=state.experiments[0].id;
+  save(false); renderExpSelect(); loadExpToForm();
+}
+
+/* ---------- daily table (4 groups) ---------- */
+function renderDailyHead(){
+  const e=activeExp()||{info:{}};
+  let h1=`<th rowspan="2">日期</th>`;
+  GROUPS.forEach(g=>{
+    const lbl=(e.info&&e.info["i_lbl"+g])? e.info["i_lbl"+g] : GROUP_DESC[g];
+    h1+=`<th colspan="4" class="grp-${g}">${g} 组 · ${lbl}</th>`;
+  });
+  h1+=`<th rowspan="2" class="no-print">操作</th>`;
+  document.getElementById("dailyHead1").innerHTML=h1;
+  let h2="";
+  GROUPS.forEach(g=> h2+=`<th class="grp-${g}">请求</th><th class="grp-${g}">填充</th><th class="grp-${g}">展示</th><th class="grp-${g}">收益</th>`);
+  document.getElementById("dailyHead2").innerHTML=h2;
 }
 function renderDays(){
-  document.getElementById("dailyBody").innerHTML = state.days.map((d,i)=>dayRowHTML(d,i)).join("");
+  renderDailyHead();
+  const e=activeExp(); if(!e){ document.getElementById("dailyBody").innerHTML=""; return; }
+  document.getElementById("dailyBody").innerHTML = e.days.map((d,idx)=>{
+    let cells=`<td><input type="date" value="${d.date||""}" oninput="upd(${idx},'date',null,this.value)" style="text-align:center;min-width:130px"></td>`;
+    GROUPS.forEach(g=>{
+      ["r","f","i","v"].forEach(fk=>{
+        const step=fk==="v"?' step="0.01"':"";
+        cells+=`<td class="grp-${g}"><input type="number"${step} value="${(d[g]&&d[g][fk]!=null)?d[g][fk]:""}" oninput="upd(${idx},'${g}','${fk}',this.value)"></td>`;
+      });
+    });
+    cells+=`<td class="no-print"><button class="btn btn-danger btn-sm" onclick="delDay(${idx})">删</button></td>`;
+    return `<tr>${cells}</tr>`;
+  }).join("");
 }
-function addDay(date){ state.days.push({date:date||"",ra:"",fa:"",ia:"",va:"",rb:"",fb:"",ib:"",vb:""}); renderDays(); save(); recalc(); }
-function delDay(i){ state.days.splice(i,1); renderDays(); save(); recalc(); }
-function upd(i,k,v){ state.days[i][k]=v; save(); recalc(); }
+function addDay(date){ const e=activeExp(); if(!e) return; e.days.push(blankDay(date)); renderDays(); save(); recalc(); }
+function delDay(i){ const e=activeExp(); if(!e) return; e.days.splice(i,1); renderDays(); save(); recalc(); }
+function upd(i,a,b,v){
+  const e=activeExp(); if(!e) return;
+  if(a==="date") e.days[i].date=v; else e.days[i][a][b]=v;
+  save(); recalc();
+}
 function genDaysFromPeriod(){
-  const s = document.getElementById("i_start").value, e = document.getElementById("i_end").value;
-  if(!s||!e){ alert("请先在【实验信息登记】填写实验周期起止日期"); return; }
-  const sd=new Date(s), ed=new Date(e);
+  const e=activeExp(); if(!e) return;
+  const s=document.getElementById("i_start").value, en=document.getElementById("i_end").value;
+  if(!s||!en){ alert("请先在【实验信息登记】填写实验周期起止日期"); return; }
+  const sd=new Date(s), ed=new Date(en);
   if(sd>ed){ alert("开始日期不能晚于结束日期"); return; }
-  if(state.days.length && !confirm("将根据周期重新生成日期行，已录入数据会被清空，确认？")) return;
-  state.days=[];
-  for(let dt=new Date(sd); dt<=ed; dt.setDate(dt.getDate()+1)){
-    state.days.push({date:dt.toISOString().slice(0,10),ra:"",fa:"",ia:"",va:"",rb:"",fb:"",ib:"",vb:""});
-  }
+  if(e.days.length && !confirm("将按周期重新生成日期行，当前广告位已录入数据会被清空，确认？")) return;
+  e.days=[];
+  for(let dt=new Date(sd); dt<=ed; dt.setDate(dt.getDate()+1)) e.days.push(blankDay(dt.toISOString().slice(0,10)));
   renderDays(); save(); recalc();
 }
 
 /* ---------- aggregation ---------- */
 function totals(){
-  const t={ra:0,fa:0,ia:0,va:0,rb:0,fb:0,ib:0,vb:0};
-  state.days.forEach(d=>{ for(const k in t) t[k]+=num(d[k]); });
+  const e=activeExp(); const t={}; GROUPS.forEach(g=> t[g]={r:0,f:0,i:0,v:0});
+  if(e) e.days.forEach(d=> GROUPS.forEach(g=>{ const c=d[g]||{}; t[g].r+=num(c.r); t[g].f+=num(c.f); t[g].i+=num(c.i); t[g].v+=num(c.v); }));
   return t;
 }
-function derived(req,fill,imp,rev){
-  return {
-    showRate: fill>0 ? imp/fill : NaN,
-    vpm: req>0 ? rev/req*1000 : NaN,
-    ipm: req>0 ? imp/req*1000 : NaN,
-    ecpm: imp>0 ? rev/imp*1000 : NaN,
-  };
-}
-function dirTag(t){ return t==='up'?'<span class="dir up">⬆️ 上升</span>': t==='down'?'<span class="dir down">⬇️ 下降</span>':'<span class="dir flat">➡️ 持平</span>'; }
+function derived(o){ return {
+  showRate: o.f>0? o.i/o.f : NaN,
+  vpm: o.r>0? o.v/o.r*1000 : NaN,
+  ipm: o.r>0? o.i/o.r*1000 : NaN,
+  ecpm: o.i>0? o.v/o.i*1000 : NaN,
+}; }
+function hasData(o){ return o.r>0||o.f>0||o.i>0||o.v>0; }
 function relDelta(b,a){ if(a===0) return b===0?0:Infinity; return (b-a)/Math.abs(a); }
-function deltaCell(b,a,goodDir){
+function deltaInfo(b,a,goodDir){
   const r=relDelta(b,a);
-  if(!isFinite(r)) return {txt:"—", cls:"neu"};
-  let cls = Math.abs(r)<SIG ? "neu" : ((r>0)===(goodDir==="up") ? "pos":"neg");
-  if(goodDir==="flat") cls = Math.abs(r)<SIG ? "pos":"neg";
+  if(!isFinite(r)) return {txt:"", cls:"neu"};
+  let cls;
+  if(goodDir==="flat") cls=Math.abs(r)<SIG?"pos":"neg";
+  else cls=Math.abs(r)<SIG?"neu":((r>0)===(goodDir==="up")?"pos":"neg");
   return {txt:(r>=0?"+":"")+(r*100).toFixed(1)+"%", cls};
 }
 
 function renderSummary(){
   const t=totals();
-  const da=derived(t.ra,t.fa,t.ia,t.va), db=derived(t.rb,t.fb,t.ib,t.vb);
-  const rows=[
-    {n:"1. 总请求数 Requests", a:fmt(t.ra), b:fmt(t.rb), raw:[t.rb,t.ra], gd:"down", exp:"显著下降 ⬇️", note:"核心降本指标，评估拦截了多少无效请求"},
-    {n:"2. 总填充数 Fills", a:fmt(t.fa), b:fmt(t.fb), raw:[t.fb,t.fa], gd:"down", exp:"下降 ⬇️", note:"伴随请求下降，整体填充同步收缩"},
-    {n:"3. 总展示数 Imps", a:fmt(t.ia), b:fmt(t.ib), raw:[t.ib,t.ia], gd:"flat", exp:"基本持平/微跌 ➡️", note:"证明过滤掉的是不会产生展示的垃圾请求"},
-    {n:"4. 展示转化率 Show Rate", a:pct(da.showRate), b:pct(db.showRate), raw:[db.showRate,da.showRate], gd:"up", exp:"显著提升 ⬆️", note:"核心效率指标！验证 B 组流量质量变纯净"},
-    {n:"5. 组内预估收益 Est.Rev", a:fmt(t.va,2), b:fmt(t.vb,2), raw:[t.vb,t.va], gd:"flat", exp:"持平/允许微亏 ➡️", note:"绝不能断崖式下跌，否则说明误杀"},
-    {n:"6. 千次请求收益 VPM", a:fmt(da.vpm,2), b:fmt(db.vpm,2), raw:[db.vpm,da.vpm], gd:"up", exp:"大幅跑赢 A ⬆️", note:"破局第一指标！单位请求变现效率"},
-    {n:"7. 千次请求展示 IPM", a:fmt(da.ipm,2), b:fmt(db.ipm,2), raw:[db.ipm,da.ipm], gd:"up", exp:"大幅跑赢 A ⬆️", note:"辅助证明 B 组请求的含金量"},
-    {n:"8. SDK 端 eCPM", a:fmt(da.ecpm,2), b:fmt(db.ecpm,2), raw:[db.ecpm,da.ecpm], gd:"flat", exp:"几乎持平 ➡️", note:"受共有实体污染，两组单价通常趋同"},
+  const der={}; GROUPS.forEach(g=> der[g]=derived(t[g]));
+  // head
+  const e=activeExp()||{info:{}};
+  let head=`<th style="text-align:left">观测指标（SDK 侧归因）</th>`;
+  GROUPS.forEach(g=>{ const lbl=(e.info&&e.info["i_lbl"+g])||GROUP_DESC[g]; head+=`<th class="grp-${g}">${g} · ${lbl}</th>`; });
+  head+=`<th>预期方向</th><th>业务结论 / 佐证</th>`;
+  document.getElementById("summaryHead").innerHTML=head;
+
+  const metrics=[
+    {n:"1. 总请求数 Requests", val:g=>fmt(t[g].r), raw:g=>t[g].r, gd:"down", exp:"显著下降 ⬇️", note:"核心降本指标，评估拦截了多少无效请求"},
+    {n:"2. 总填充数 Fills", val:g=>fmt(t[g].f), raw:g=>t[g].f, gd:"down", exp:"下降 ⬇️", note:"伴随请求下降，整体填充同步收缩"},
+    {n:"3. 总展示数 Imps", val:g=>fmt(t[g].i), raw:g=>t[g].i, gd:"flat", exp:"基本持平/微跌 ➡️", note:"证明过滤掉的是不会产生展示的垃圾请求"},
+    {n:"4. 展示转化率 Show Rate", val:g=>pct(der[g].showRate), raw:g=>der[g].showRate, gd:"up", exp:"显著提升 ⬆️", note:"核心效率指标！验证变体组流量质量变纯净"},
+    {n:"5. 组内预估收益 Est.Rev", val:g=>fmt(t[g].v,2), raw:g=>t[g].v, gd:"flat", exp:"持平/允许微亏 ➡️", note:"绝不能断崖式下跌，否则说明误杀"},
+    {n:"6. 千次请求收益 VPM", val:g=>fmt(der[g].vpm,2), raw:g=>der[g].vpm, gd:"up", exp:"大幅跑赢 A ⬆️", note:"破局第一指标！单位请求变现效率"},
+    {n:"7. 千次请求展示 IPM", val:g=>fmt(der[g].ipm,2), raw:g=>der[g].ipm, gd:"up", exp:"大幅跑赢 A ⬆️", note:"辅助证明变体组请求的含金量"},
+    {n:"8. SDK 端 eCPM", val:g=>fmt(der[g].ecpm,2), raw:g=>der[g].ecpm, gd:"flat", exp:"几乎持平 ➡️", note:"受共有实体污染，各组单价通常趋同"},
   ];
-  document.getElementById("summaryBody").innerHTML = rows.map(r=>{
-    const dc = deltaCell(r.raw[0], r.raw[1], r.gd);
-    return `<tr>
-      <td class="metric-name">${r.n}</td>
-      <td class="calc muted">${r.a}</td>
-      <td class="calc">${r.b}</td>
-      <td>${r.exp}</td>
-      <td class="calc"><span class="${dc.cls}">${dc.txt}</span></td>
-      <td style="text-align:left;font-size:12px">${r.note}</td>
-    </tr>`;
+  document.getElementById("summaryBody").innerHTML = metrics.map(m=>{
+    let cells=`<td class="metric-name">${m.n}</td>`;
+    GROUPS.forEach(g=>{
+      const muted = g==="A"?" muted":"";
+      let sub="";
+      if(g!=="A" && hasData(t[g]) && hasData(t.A)){
+        const di=deltaInfo(m.raw(g), m.raw("A"), m.gd);
+        if(di.txt) sub=`<span class="vsa ${di.cls}">vs A ${di.txt}</span>`;
+      }
+      cells+=`<td class="calc${muted} grp-${g}">${m.val(g)}${sub}</td>`;
+    });
+    cells+=`<td>${m.exp}</td><td style="text-align:left;font-size:12px">${m.note}</td>`;
+    return `<tr>${cells}</tr>`;
   }).join("");
-  // footer sums
-  document.getElementById("sum_ra").textContent=fmt(t.ra);
-  document.getElementById("sum_fa").textContent=fmt(t.fa);
-  document.getElementById("sum_ia").textContent=fmt(t.ia);
-  document.getElementById("sum_va").textContent=fmt(t.va,2);
-  document.getElementById("sum_rb").textContent=fmt(t.rb);
-  document.getElementById("sum_fb").textContent=fmt(t.fb);
-  document.getElementById("sum_ib").textContent=fmt(t.ib);
-  document.getElementById("sum_vb").textContent=fmt(t.vb,2);
-  return {da,db,t};
+
+  let foot=`<td class="metric-name">周期合计</td>`;
+  GROUPS.forEach(g=>{ foot+=`<td class="calc grp-${g}">${fmt(t[g].r)}</td><td class="calc grp-${g}">${fmt(t[g].f)}</td><td class="calc grp-${g}">${fmt(t[g].i)}</td><td class="calc grp-${g}">${fmt(t[g].v,2)}</td>`; });
+  foot+=`<td class="no-print"></td>`;
+  document.getElementById("dailyFoot").innerHTML=foot;
+  return {der,t};
 }
 
 /* ---------- spill ---------- */
 function renderSpill(){
-  const g=(id)=>num(document.getElementById(id).value);
-  const set=(id,b,a,gd)=>{ const dc=deltaCell(b,a,gd); document.getElementById(id).innerHTML=`<span class="${dc.cls}">${dc.txt}</span>`; };
+  const g=id=>num(document.getElementById(id).value);
+  const set=(id,b,a,gd)=>{ const di=deltaInfo(b,a,gd); document.getElementById(id).innerHTML=di.txt?`<span class="${di.cls}">${di.txt}</span>`:"—"; };
   set("sp_req_delta", g("sp_req_post"), g("sp_req_pre"), "down");
   set("sp_fill_delta", g("sp_fill_post"), g("sp_fill_pre"), "up");
   set("sp_ecpm_delta", g("sp_ecpm_post"), g("sp_ecpm_pre"), "up");
@@ -419,128 +494,208 @@ function renderSpill(){
 }
 
 /* ---------- verdict ---------- */
+function classify(vd, rd, qd){
+  const vpmWin=vd>SIG, vpmFlat=Math.abs(vd)<=SIG;
+  const revUp=rd>SIG, revFlat=Math.abs(rd)<=SIG, revDown=rd<-SIG;
+  const reqDrop=qd<=-0.30;
+  if(vpmWin&&revUp) return {cls:"A",tag:"A",title:"完美通关，准备全量",lis:["内部榨干请求效率（VPM&gt;A）且大盘溢价，盘子变大。","<strong>决策：通过测试，逐步扩大该变体灰度比例。</strong>"]};
+  if(vpmWin&&revFlat&&reqDrop) return {cls:"B",tag:"B",title:"防守成功，技术降本",lis:["收益持平但总请求降约30%+，算力/带宽大幅节省。","<strong>决策：符合战略预期，可以全量。</strong>"]};
+  if(vpmFlat&&revDown) return {cls:"C",tag:"C",title:"误杀现金牛，恶性循环",lis:["VPM 与 A 拉不开差距且大盘总收益下跌，疑似低流量死锁或词表不准。","<strong>决策：立刻人工熔断，调高 Base_Rate 兜底或退回回测重校准。</strong>"]};
+  return {cls:"none",tag:"none",title:"混合信号 · 需人工研判",lis:[`VPM vs A ${(vd*100).toFixed(1)}%；大盘收益 ${(rd*100).toFixed(1)}%；大盘请求 ${(qd*100).toFixed(1)}%`,"未命中 A/B/C 标准组合，建议结合显著性检验人工判断。"]};
+}
 function renderVerdict(agg){
-  const g=(id)=>num(document.getElementById(id).value);
-  const vpmA=agg.da.vpm, vpmB=agg.db.vpm;
-  const revPre=g("sp_rev_pre"), revPost=g("sp_rev_post");
-  const reqPre=g("sp_req_pre"), reqPost=g("sp_req_post");
+  const g=id=>num(document.getElementById(id).value);
+  const der=agg.der, t=agg.t;
+  const revPre=g("sp_rev_pre"), revPost=g("sp_rev_post"), reqPre=g("sp_req_pre"), reqPost=g("sp_req_post");
+  const rd=relDelta(revPost,revPre), qd=relDelta(reqPost,reqPre);
 
-  document.getElementById("kpi_vpma").textContent = isFinite(vpmA)?fmt(vpmA,2):"—";
-  document.getElementById("kpi_vpmb").textContent = isFinite(vpmB)?fmt(vpmB,2):"—";
-  const vd = relDelta(vpmB,vpmA);
-  document.getElementById("kpi_vpm_delta").innerHTML = isFinite(vd)? `<span class="${vd>SIG?'pos':vd<-SIG?'neg':'neu'}">B vs A ${(vd>=0?'+':'')+(vd*100).toFixed(1)}%</span>`:"";
-  document.getElementById("kpi_rev").textContent = (revPre||revPost)? `${fmt(revPre,0)} → ${fmt(revPost,0)}`:"—";
-  const rd=relDelta(revPost,revPre);
-  document.getElementById("kpi_rev_delta").innerHTML = isFinite(rd)&&(revPre||revPost)? `<span class="${rd>SIG?'pos':rd<-SIG?'neg':'neu'}">${(rd>=0?'+':'')+(rd*100).toFixed(1)}%</span>`:"";
-  document.getElementById("kpi_req").textContent = (reqPre||reqPost)? `${fmt(reqPre,0)} → ${fmt(reqPost,0)}`:"—";
-  const qd=relDelta(reqPost,reqPre);
-  document.getElementById("kpi_req_delta").innerHTML = isFinite(qd)&&(reqPre||reqPost)? `<span class="${qd<-SIG?'pos':qd>SIG?'neg':'neu'}">${(qd>=0?'+':'')+(qd*100).toFixed(1)}%</span>`:"";
+  // KPI
+  let kpi="";
+  GROUPS.forEach(gk=>{
+    const v=der[gk].vpm;
+    let sub="";
+    if(gk!=="A"&&hasData(t[gk])&&hasData(t.A)){
+      const di=deltaInfo(v,der.A.vpm,"up");
+      if(di.txt) sub=`<div class="k-sub"><span class="${di.cls}">vs A ${di.txt}</span></div>`;
+    }
+    kpi+=`<div class="kpi"><div class="k-label">VPM_${gk}（千次请求收益）</div><div class="k-val">${isFinite(v)?fmt(v,2):"—"}</div>${sub}</div>`;
+  });
+  document.getElementById("kpiRow").innerHTML=kpi;
 
   const box=document.getElementById("verdictBox");
-  const hasCore = isFinite(vpmA)&&isFinite(vpmB)&&vpmA>0;
-  const hasSpill = (revPre>0)||(revPost>0);
-  if(!hasCore || !hasSpill){
-    box.innerHTML=`<div class="verdict-card none"><span class="verdict-tag none">数据不足</span><h3>等待数据回填</h3><p>请完成【核心数据回收】逐日录入，并在【大盘溢出效应】填入实验前/后 7 天平均值后，自动给出判定建议。</p></div>`;
+  if(!hasData(t.A)||!isFinite(der.A.vpm)||der.A.vpm<=0){
+    box.innerHTML=`<div class="verdict-card none"><span class="verdict-tag none">数据不足</span><h3>等待数据回填</h3><p>请先完成 A 对照组逐日录入。变体组与大盘溢出数据齐全后自动判定。</p></div>`;
+    document.getElementById("recoBox").innerHTML="";
     return;
   }
-  const vpmWin = vd > SIG;                 // VPM_B 显著跑赢 A
-  const vpmFlat = Math.abs(vd) <= SIG;     // 拉不开差距
-  const revUp = rd > SIG;
-  const revFlat = Math.abs(rd) <= SIG;
-  const revDown = rd < -SIG;
-  const reqDrop = qd <= -0.30;             // 总请求下降约30%+
+  const hasSpill=(revPre>0)||(revPost>0);
+  let cards="", best=null;
+  VARIANTS.forEach(gk=>{
+    if(!hasData(t[gk])) return;
+    const vd=relDelta(der[gk].vpm, der.A.vpm);
+    const lbl=(activeExp().info&&activeExp().info["i_lbl"+gk])||GROUP_DESC[gk];
+    if(!hasSpill){
+      cards+=`<div class="verdict-card none"><span class="verdict-tag none">${gk} 组</span><h3>${gk} · ${lbl}：VPM vs A ${(vd*100).toFixed(1)}%</h3><ul><li>变体内部效率已可比较，等待【大盘溢出效应】填入实验前/后数据后给出完整 A/B/C 判定。</li></ul></div>`;
+    } else {
+      const r=classify(vd,rd,qd);
+      cards+=`<div class="verdict-card ${r.cls}"><span class="verdict-tag ${r.tag}">${gk} 组 · ${r.tag==="none"?"研判":"情况 "+r.tag}</span><h3>${gk} · ${lbl}：${r.title}（VPM vs A ${(vd*100).toFixed(1)}%）</h3><ul>${r.lis.map(x=>`<li>${x}</li>`).join("")}</ul></div>`;
+    }
+    if(vd>SIG && (!best||vd>best.vd)) best={gk,vd,lbl};
+  });
+  if(!cards) cards=`<div class="verdict-card none"><span class="verdict-tag none">数据不足</span><h3>暂无变体组数据</h3><p>请录入 B/C/D 任一变体组的逐日数据。</p></div>`;
+  box.innerHTML=cards;
 
-  let cls="none", tag="none", title="", lis=[];
-  if(vpmWin && revUp){
-    cls="A"; tag="A"; title="情况 A：完美通关，准备全量";
-    lis=["B 组内部榨干请求效率（VPM_B 显著 &gt; VPM_A），且大盘成功溢价，整体盘子变大。","<strong>决策：通过测试，逐步扩大灰度比例。</strong>"];
-  } else if(vpmWin && revFlat && reqDrop){
-    cls="B"; tag="B"; title="情况 B：防守成功，技术降本";
-    lis=["收益持平，但总请求下降约 30%+，服务器/带宽成本大幅节省，收益质量变高。","<strong>决策：策略有效，符合战略预期，可以全量。</strong>"];
-  } else if(vpmFlat && revDown){
-    cls="C"; tag="C"; title="情况 C：误杀现金牛，算法陷入恶性循环";
-    lis=["VPM_B 与 A 拉不开差距，且大盘总收益下跌，可能触发低流量恶性循环或词表不准。","<strong>决策：立刻人工熔断，调高 Base_Rate 兜底值，或退回回测阶段重新校准词表。</strong>"];
-  } else {
-    cls="none"; tag="none"; title="混合信号 · 需人工研判";
-    lis=[
-      `VPM：B vs A ${(vd*100).toFixed(1)}%（${vpmWin?'显著跑赢':vpmFlat?'未拉开差距':'落后'}）`,
-      `大盘总收益：${(rd*100).toFixed(1)}%（${revUp?'上升':revFlat?'持平':'下跌'}）`,
-      `大盘总请求：${(qd*100).toFixed(1)}%（${reqDrop?'已降约30%+':'降幅不足30%'}）`,
-      "未完全命中 A/B/C 任一标准组合，建议结合显著性检验与小流量位死锁情况人工判断。"
-    ];
-  }
-  box.innerHTML=`<div class="verdict-card ${cls}"><span class="verdict-tag ${tag}">${tag==='none'?'研判':'情况 '+tag}</span><h3>${title}</h3><ul>${lis.map(x=>`<li>${x}</li>`).join("")}</ul></div>`;
+  const reco=document.getElementById("recoBox");
+  if(best) reco.innerHTML=`<div class="reco">🏁 <strong>推荐变体：${best.gk} 组（${best.lbl}）</strong> —— 在四个组中 VPM 显著跑赢 A 对照（+${(best.vd*100).toFixed(1)}%），建议优先以该组参数推进灰度（仍需结合大盘溢出判定与显著性检验）。</div>`;
+  else reco.innerHTML=`<div class="reco">⚠️ 暂无任一变体组 VPM 显著跑赢 A 对照（阈值 ${(SIG*100)}%）。建议继续观察、检查词表或调整策略参数。</div>`;
 }
 
 /* ---------- recalc / persist ---------- */
-function recalc(){
-  const agg=renderSummary();
-  renderSpill();
-  renderVerdict(agg);
+function recalc(){ const agg=renderSummary(); renderSpill(); renderVerdict(agg); }
+function collectActive(){
+  const e=activeExp(); if(!e) return;
+  e.info={}; INFO_FIELDS.forEach(id=> e.info[id]=document.getElementById(id).value);
+  e.spill={}; SPILL_FIELDS.forEach(id=> e.spill[id]=document.getElementById(id).value);
 }
-function collect(){
-  state.info={}; INFO_FIELDS.forEach(id=> state.info[id]=document.getElementById(id).value);
-  state.spill={}; SPILL_FIELDS.forEach(id=> state.spill[id]=document.getElementById(id).value);
-}
-function save(){
-  collect();
+function save(showTip=true){
+  collectActive();
   localStorage.setItem(LS_KEY, JSON.stringify(state));
-  const el=document.getElementById("saveState");
-  el.textContent="✓ 已保存 "+new Date().toLocaleTimeString();
-  clearTimeout(window.__st); window.__st=setTimeout(()=>el.textContent="数据自动保存在本浏览器",2000);
+  if(showTip){
+    const el=document.getElementById("saveState");
+    el.textContent="✓ 已保存 "+new Date().toLocaleTimeString();
+    clearTimeout(window.__st); window.__st=setTimeout(()=>el.textContent="数据自动保存在本浏览器",2000);
+  }
+  renderExpSelect();
+}
+function migrateV1(raw){
+  try{
+    const old=JSON.parse(raw);
+    const e=blankExp((old.info&&old.info.i_name)||"导入的旧实验");
+    e.info=Object.assign({}, old.info||{});
+    e.spill=Object.assign({}, old.spill||{});
+    (old.days||[]).forEach(d=>{
+      const nd=blankDay(d.date||"");
+      nd.A={r:d.ra||"",f:d.fa||"",i:d.ia||"",v:d.va||""};
+      nd.B={r:d.rb||"",f:d.fb||"",i:d.ib||"",v:d.vb||""};
+      e.days.push(nd);
+    });
+    return e;
+  }catch(err){ return null; }
+}
+function normalize(st){
+  if(!st||!Array.isArray(st.experiments)||!st.experiments.length){
+    state={experiments:[blankExp("新广告位实验 1")]};
+  } else state=st;
+  state.experiments.forEach(e=>{ e.id=e.id||uid(); e.info=e.info||{}; e.spill=e.spill||{};
+    e.days=(e.days||[]).map(d=>{ const nd=blankDay(d.date||""); GROUPS.forEach(g=>{ if(d[g]) nd[g]={r:d[g].r||"",f:d[g].f||"",i:d[g].i||"",v:d[g].v||""}; }); return nd; }); });
+  if(!state.activeId || !state.experiments.find(e=>e.id===state.activeId)) state.activeId=state.experiments[0].id;
 }
 function load(){
-  const raw=localStorage.getItem(LS_KEY);
-  if(raw){ try{ state=JSON.parse(raw); }catch(e){} }
-  if(!state.days) state.days=[];
-  INFO_FIELDS.forEach(id=>{ if(state.info&&state.info[id]!=null) document.getElementById(id).value=state.info[id]; });
-  SPILL_FIELDS.forEach(id=>{ if(state.spill&&state.spill[id]!=null) document.getElementById(id).value=state.spill[id]; });
-  renderDays(); recalc();
+  let raw=localStorage.getItem(LS_KEY);
+  if(raw){ try{ normalize(JSON.parse(raw)); }catch(e){ normalize(null); } }
+  else {
+    const oldRaw=localStorage.getItem(LS_KEY_OLD);
+    if(oldRaw){ const e=migrateV1(oldRaw); state={experiments:[e||blankExp("新广告位实验 1")]}; normalize(state); }
+    else normalize(null);
+  }
+  renderExpSelect(); loadExpToForm();
 }
-INFO_FIELDS.concat(SPILL_FIELDS).forEach(id=>{
-  document.addEventListener("input", e=>{ if(e.target.id===id){ save(); recalc(); } });
+document.addEventListener("input", e=>{
+  if(INFO_FIELDS.includes(e.target.id)){ save(); if(["i_name","i_placement","i_lblA","i_lblB","i_lblC","i_lblD"].includes(e.target.id)) renderExpSelect(); recalc(); }
+  else if(SPILL_FIELDS.includes(e.target.id)){ save(); recalc(); }
 });
 
 /* ---------- import / export ---------- */
 function exportJSON(){
-  collect();
+  collectActive();
   const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
-  a.download=`RPR_AB实验数据_${(state.info.i_name||"未命名").slice(0,20)}_${new Date().toISOString().slice(0,10)}.json`;
+  a.download=`RPR实验全部备份_${new Date().toISOString().slice(0,10)}.json`;
   a.click();
 }
 function importJSON(inp){
   const f=inp.files[0]; if(!f) return;
   const r=new FileReader();
-  r.onload=()=>{ try{ state=JSON.parse(r.result); if(!state.days)state.days=[]; load(); alert("导入成功"); }catch(e){ alert("文件解析失败"); } };
-  r.readAsText(f); inp.value="";
+  r.onload=()=>{
+    try{
+      const data=JSON.parse(r.result);
+      if(data && Array.isArray(data.experiments)){
+        if(state.experiments.length && !confirm("导入将替换当前全部实验，确认？（建议先导出备份）")) { inp.value=""; return; }
+        normalize(data);
+      } else if(data && data.info){
+        const e=migrateV1(r.result); if(e){ state.experiments.push(e); state.activeId=e.id; }
+      } else { alert("无法识别的文件格式"); inp.value=""; return; }
+      save(false); renderExpSelect(); loadExpToForm(); alert("导入成功");
+    }catch(e){ alert("文件解析失败"); }
+    inp.value="";
+  };
+  r.readAsText(f);
+}
+function parseCSV(text){
+  const lines=text.replace(/\r/g,"").split("\n").filter(l=>l.trim()!=="");
+  return lines.map(l=>l.split(","));
+}
+function downloadCsvTemplate(){
+  const rows=[
+    ["广告位名称","日期","组别(A/B/C/D)","请求","填充","展示","预估收益"],
+    ["Placement_示例","2026-05-20","A","100000","60000","9000","45.20"],
+    ["Placement_示例","2026-05-20","B","70000","42000","9100","46.10"],
+    ["Placement_示例2","2026-05-20","A","50000","30000","4000","20.00"],
+  ];
+  const csv="﻿"+rows.map(r=>r.join(",")).join("\n");
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download="RPR批量导入模板.csv"; a.click();
+}
+function importCSV(inp){
+  const f=inp.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      let rows=parseCSV(r.result);
+      if(rows.length<2){ alert("CSV 无有效数据行"); inp.value=""; return; }
+      // strip header if first cell non-numeric-ish
+      if(/广告位|placement/i.test(rows[0][0])||rows[0][2]&&/组别|group/i.test(rows[0][2])) rows=rows.slice(1);
+      let added=0, byName={};
+      state.experiments.forEach(e=> byName[expLabel(e)]=e);
+      rows.forEach(c=>{
+        if(c.length<7) return;
+        const name=(c[0]||"").trim(); const date=(c[1]||"").trim(); const grp=(c[2]||"").trim().toUpperCase();
+        if(!name||!date||!GROUPS.includes(grp)) return;
+        let e=byName[name];
+        if(!e){ e=blankExp(name); e.info.i_placement=name; state.experiments.push(e); byName[name]=e; }
+        let day=e.days.find(d=>d.date===date);
+        if(!day){ day=blankDay(date); e.days.push(day); }
+        day[grp]={ r:c[3]||"", f:c[4]||"", i:c[5]||"", v:c[6]||"" };
+        added++;
+      });
+      state.experiments.forEach(e=> e.days.sort((a,b)=> (a.date||"").localeCompare(b.date||"")));
+      if(!state.activeId||!state.experiments.find(e=>e.id===state.activeId)) state.activeId=state.experiments[0].id;
+      save(false); renderExpSelect(); loadExpToForm();
+      alert(`批量导入完成：写入 ${added} 条组别日数据，当前共 ${state.experiments.length} 个广告位实验。`);
+    }catch(e){ alert("CSV 解析失败，请使用模板格式"); }
+    inp.value="";
+  };
+  r.readAsText(f);
 }
 function exportCSV(){
-  const t=totals();
-  const da=derived(t.ra,t.fa,t.ia,t.va), db=derived(t.rb,t.fb,t.ib,t.vb);
-  let rows=[["日期","A_Req","A_Fill","A_Imp","A_Rev","B_Req","B_Fill","B_Imp","B_Rev"]];
-  state.days.forEach(d=> rows.push([d.date,d.ra,d.fa,d.ia,d.va,d.rb,d.fb,d.ib,d.vb]));
-  rows.push(["周期合计",t.ra,t.fa,t.ia,t.va,t.rb,t.fb,t.ib,t.vb]);
-  rows.push([]);
-  rows.push(["汇总指标","对照组A","实验组B"]);
-  rows.push(["展示转化率", da.showRate, db.showRate]);
-  rows.push(["VPM 千次请求收益", da.vpm, db.vpm]);
-  rows.push(["IPM 千次请求展示", da.ipm, db.ipm]);
-  rows.push(["SDK eCPM", da.ecpm, db.ecpm]);
+  collectActive();
+  let rows=[["广告位名称","日期","组别","请求","填充","展示","预估收益"]];
+  state.experiments.forEach(e=>{
+    const nm=expLabel(e);
+    (e.days||[]).forEach(d=> GROUPS.forEach(g=>{
+      const c=d[g]||{};
+      if(c.r||c.f||c.i||c.v) rows.push([nm,d.date,g,c.r||0,c.f||0,c.i||0,c.v||0]);
+    }));
+  });
   const csv="﻿"+rows.map(r=>r.join(",")).join("\n");
-  const blob=new Blob([csv],{type:"text/csv"});
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download=`RPR_AB实验明细_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download=`RPR实验明细_全部广告位_${new Date().toISOString().slice(0,10)}.csv`; a.click();
 }
 function clearAll(){
-  if(!confirm("将清空全部已录入数据（含本地缓存），且不可恢复，确认？")) return;
-  localStorage.removeItem(LS_KEY);
-  state={info:{},days:[],spill:{}};
-  INFO_FIELDS.concat(SPILL_FIELDS).forEach(id=> document.getElementById(id).value="");
-  renderDays(); recalc();
+  if(!confirm("将清空全部广告位实验数据（含本地缓存），不可恢复，确认？")) return;
+  localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_KEY_OLD);
+  normalize(null); save(false); renderExpSelect(); loadExpToForm();
 }
 
 load();
