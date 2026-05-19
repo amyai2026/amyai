@@ -671,28 +671,29 @@ function expStats(e){
 function analyzeImport(){
   let lines=[];
   state.experiments.forEach(e=>{
-    const s=expStats(e), info=e.info||{};
-    // 策略组 = 标签含 rpr/算法/灰度；对照基准 = 标签含 对照，否则用 A 组
-    let treat=null, ctrls=[];
-    GROUPS.forEach(g=>{
-      if(!s[g].has) return;
-      const lbl=(info["i_lbl"+g]||"").toLowerCase();
-      if(/rpr|算法|策略|灰度/.test(lbl)) treat=treat||g;
-      if(/对照/.test(lbl)) ctrls.push(g);
-    });
-    if(!ctrls.length && s.A.has) ctrls=["A"];
-    if(!treat){ const v=VARIANTS.filter(g=>s[g].has); treat=v[0]||null; }
-    if(!treat || !ctrls.length){ lines.push(`• ${expLabel(e)}：数据组别不足，无法对比`); return; }
+    const s=expStats(e), info=e.info||{}, w=info.__w||{};
+    // 实验组 = 分组名称含 rpr（不区分大小写）；其余有数据的组均为对照组
+    const present=GROUPS.filter(g=>s[g].has);
+    const wTxt=g=> w[g]!=null? `,流量${w[g]}%` : "";
+    const treatGs=present.filter(g=> /rpr/i.test(info["i_lbl"+g]||""));
+    const ctrls=present.filter(g=> !/rpr/i.test(info["i_lbl"+g]||""));
+    const splitTxt=present.map(g=> `${g}「${info["i_lbl"+g]||""}」${w[g]!=null?w[g]+"%":"—"}`).join("｜");
+    if(!treatGs.length){ lines.push(`• ${expLabel(e)}\n   流量分组：${splitTxt}\n   未发现含「rpr」关键词的实验组，无法做实验/对照对比`); return; }
+    if(!ctrls.length){ lines.push(`• ${expLabel(e)}\n   流量分组：${splitTxt}\n   仅有实验组、无对照组，无法对比`); return; }
     const cVpm=ctrls.reduce((a,g)=>a+s[g].vpm,0)/ctrls.length;
     const cShow=ctrls.reduce((a,g)=>a+s[g].show,0)/ctrls.length;
     const cEcpm=ctrls.reduce((a,g)=>a+s[g].ecpm,0)/ctrls.length;
-    const dV=relDelta(s[treat].vpm,cVpm), dS=relDelta(s[treat].show,cShow), dE=relDelta(s[treat].ecpm,cEcpm);
-    let concl;
-    if(dV>SIG && dS>0) concl="✅ 策略组单位请求变现效率与流量纯净度均跑赢对照（情况A/B倾向，建议结合大盘溢出确认后扩量）";
-    else if(Math.abs(dV)<=SIG) concl="➖ 策略组与对照拉不开差距（疑似误杀/词表不准倾向，需查大盘是否下跌，必要时调高 Base_Rate）";
-    else if(dV<-SIG) concl="⚠️ 策略组效率落后对照，存在误杀现金牛风险，建议人工研判/熔断";
-    else concl="🟡 信号混合，需结合大盘溢出与显著性检验人工判断";
-    lines.push(`• ${expLabel(e)}（策略组=${treat}「${info["i_lbl"+treat]||""}」 vs 对照${ctrls.join("/")}）\n   VPM ${fmt(s[treat].vpm,2)} vs ${fmt(cVpm,2)}（${(dV>=0?"+":"")+(dV*100).toFixed(1)}%）｜展示率Δ ${(dS>=0?"+":"")+(dS*100).toFixed(1)}%｜SDK eCPM Δ ${(dE>=0?"+":"")+(dE*100).toFixed(1)}%\n   ${concl}`);
+    let body=`• ${expLabel(e)}\n   流量分组：${splitTxt}\n   对照组(${ctrls.join("/")})基准  VPM=${fmt(cVpm,3)}｜展示率=${pct(cShow)}｜eCPM=${fmt(cEcpm,3)}`;
+    treatGs.forEach(tg=>{
+      const dV=relDelta(s[tg].vpm,cVpm), dS=relDelta(s[tg].show,cShow), dE=relDelta(s[tg].ecpm,cEcpm);
+      let concl;
+      if(dV>SIG && dS>0) concl="✅ 实验组单位请求变现效率与流量纯净度均跑赢对照（情况A/B倾向，结合大盘溢出确认后可扩量）";
+      else if(Math.abs(dV)<=SIG) concl="➖ 实验组与对照拉不开差距（疑似误杀/词表不准倾向，需查大盘是否下跌，必要时调高 Base_Rate）";
+      else if(dV<-SIG) concl="⚠️ 实验组效率落后对照，存在误杀现金牛风险，建议人工研判/熔断";
+      else concl="🟡 信号混合，需结合大盘溢出与显著性检验人工判断";
+      body+=`\n   ▶ 实验组 ${tg}「${info["i_lbl"+tg]||""}」${wTxt(tg)}：VPM ${fmt(s[tg].vpm,3)}（vs对照 ${(dV>=0?"+":"")+(dV*100).toFixed(1)}%）｜展示率Δ ${(dS>=0?"+":"")+(dS*100).toFixed(1)}%｜eCPM Δ ${(dE>=0?"+":"")+(dE*100).toFixed(1)}%\n     ${concl}`;
+    });
+    lines.push(body);
   });
   return lines.join("\n\n");
 }
@@ -716,6 +717,7 @@ function importRprRaw(rows){
   const H=rows[0];
   const ci={
     date:colIdx(H,["日期"]), name:colIdx(H,["分组名称"]), exp:colIdx(H,["实验ID"]),
+    weight:colIdx(H,["权重"]),
     rev:colIdx(H,["预估收益"]), req:colIdx(H,["流量请求"]), fillR:colIdx(H,["流量填充率"]),
     imp:colIdx(H,["展示"])
   };
@@ -728,8 +730,9 @@ function importRprRaw(rows){
     const date=toISODate(c[ci.date]); const expId=(c[ci.exp]||"").trim();
     const gl=groupLetter(c[ci.name]); if(!date||!expId||!gl) continue;
     let e=byExp[expId];
-    if(!e){ e=blankExp("实验 "+expId); e.info.i_placement="实验ID "+expId; e.info.__src=expId; state.experiments.push(e); byExp[expId]=e; }
+    if(!e){ e=blankExp("实验 "+expId); e.info.i_placement="实验ID "+expId; e.info.__src=expId; e.info.__w={}; state.experiments.push(e); byExp[expId]=e; }
     e.info["i_lbl"+gl]=(c[ci.name]||"").trim();
+    if(ci.weight>=0){ const wm=(c[ci.weight]||"").match(/[\d.]+/); if(wm){ e.info.__w=e.info.__w||{}; e.info.__w[gl]=parseFloat(wm[0]); } }
     const req=num(c[ci.req]), fillRate=num(c[ci.fillR]), imp=num(c[ci.imp]), rev=num(c[ci.rev]);
     let day=e.days.find(d=>d.date===date);
     if(!day){ day=blankDay(date); e.days.push(day); }
@@ -737,6 +740,10 @@ function importRprRaw(rows){
     added++;
   }
   state.experiments.forEach(e=> e.days.sort((a,b)=> (a.date||"").localeCompare(b.date||"")));
+  state.experiments.forEach(e=>{
+    const w=e.info&&e.info.__w; if(!w) return;
+    e.info.i_split=GROUPS.filter(g=>w[g]!=null).map(g=>`${g}:${w[g]}%`).join(" | ");
+  });
   // 默认切到数据量最大的实验
   let big=null,bn=-1;
   state.experiments.forEach(e=>{ const n=(e.days||[]).reduce((s,d)=> s+GROUPS.reduce((x,g)=>x+num(d[g]&&d[g].r),0),0); if(n>bn){bn=n;big=e;} });
