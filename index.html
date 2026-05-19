@@ -554,8 +554,8 @@ function renderVerdict(agg){
 function recalc(){ const agg=renderSummary(); renderSpill(); renderVerdict(agg); }
 function collectActive(){
   const e=activeExp(); if(!e) return;
-  e.info={}; INFO_FIELDS.forEach(id=> e.info[id]=document.getElementById(id).value);
-  e.spill={}; SPILL_FIELDS.forEach(id=> e.spill[id]=document.getElementById(id).value);
+  e.info=e.info||{}; INFO_FIELDS.forEach(id=> e.info[id]=document.getElementById(id).value);
+  e.spill=e.spill||{}; SPILL_FIELDS.forEach(id=> e.spill[id]=document.getElementById(id).value);
 }
 function save(showTip=true){
   collectActive();
@@ -632,9 +632,69 @@ function importJSON(inp){
   };
   r.readAsText(f);
 }
+function parseCSVLine(line){
+  const out=[]; let cur="", q=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(q){
+      if(ch==='"'){ if(line[i+1]==='"'){ cur+='"'; i++; } else q=false; }
+      else cur+=ch;
+    } else {
+      if(ch==='"') q=true;
+      else if(ch===','){ out.push(cur); cur=""; }
+      else cur+=ch;
+    }
+  }
+  out.push(cur);
+  return out.map(s=>s.trim());
+}
 function parseCSV(text){
-  const lines=text.replace(/\r/g,"").split("\n").filter(l=>l.trim()!=="");
-  return lines.map(l=>l.split(","));
+  const lines=text.replace(/^﻿/,"").replace(/\r/g,"").split("\n").filter(l=>l.trim()!=="");
+  return lines.map(parseCSVLine);
+}
+function toISODate(s){
+  s=(s||"").trim();
+  if(/^\d{8}$/.test(s)) return s.slice(0,4)+"-"+s.slice(4,6)+"-"+s.slice(6,8);
+  if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)){ const p=s.split("-"); return p[0]+"-"+p[1].padStart(2,"0")+"-"+p[2].padStart(2,"0"); }
+  return s;
+}
+function groupLetter(name){ const m=(name||"").match(/[A-Da-d]/); return m? m[0].toUpperCase() : null; }
+function expStats(e){
+  const t={}; GROUPS.forEach(g=> t[g]={r:0,f:0,i:0,v:0});
+  (e.days||[]).forEach(d=> GROUPS.forEach(g=>{ const c=d[g]||{}; t[g].r+=num(c.r); t[g].f+=num(c.f); t[g].i+=num(c.i); t[g].v+=num(c.v); }));
+  const out={};
+  GROUPS.forEach(g=>{ const o=t[g]; out[g]={
+    has:o.r>0||o.i>0||o.v>0,
+    vpm:o.r>0?o.v/o.r*1000:NaN, ecpm:o.i>0?o.v/o.i*1000:NaN, show:o.f>0?o.i/o.f:NaN, req:o.r, rev:o.v }; });
+  return out;
+}
+function analyzeImport(){
+  let lines=[];
+  state.experiments.forEach(e=>{
+    const s=expStats(e), info=e.info||{};
+    // 策略组 = 标签含 rpr/算法/灰度；对照基准 = 标签含 对照，否则用 A 组
+    let treat=null, ctrls=[];
+    GROUPS.forEach(g=>{
+      if(!s[g].has) return;
+      const lbl=(info["i_lbl"+g]||"").toLowerCase();
+      if(/rpr|算法|策略|灰度/.test(lbl)) treat=treat||g;
+      if(/对照/.test(lbl)) ctrls.push(g);
+    });
+    if(!ctrls.length && s.A.has) ctrls=["A"];
+    if(!treat){ const v=VARIANTS.filter(g=>s[g].has); treat=v[0]||null; }
+    if(!treat || !ctrls.length){ lines.push(`• ${expLabel(e)}：数据组别不足，无法对比`); return; }
+    const cVpm=ctrls.reduce((a,g)=>a+s[g].vpm,0)/ctrls.length;
+    const cShow=ctrls.reduce((a,g)=>a+s[g].show,0)/ctrls.length;
+    const cEcpm=ctrls.reduce((a,g)=>a+s[g].ecpm,0)/ctrls.length;
+    const dV=relDelta(s[treat].vpm,cVpm), dS=relDelta(s[treat].show,cShow), dE=relDelta(s[treat].ecpm,cEcpm);
+    let concl;
+    if(dV>SIG && dS>0) concl="✅ 策略组单位请求变现效率与流量纯净度均跑赢对照（情况A/B倾向，建议结合大盘溢出确认后扩量）";
+    else if(Math.abs(dV)<=SIG) concl="➖ 策略组与对照拉不开差距（疑似误杀/词表不准倾向，需查大盘是否下跌，必要时调高 Base_Rate）";
+    else if(dV<-SIG) concl="⚠️ 策略组效率落后对照，存在误杀现金牛风险，建议人工研判/熔断";
+    else concl="🟡 信号混合，需结合大盘溢出与显著性检验人工判断";
+    lines.push(`• ${expLabel(e)}（策略组=${treat}「${info["i_lbl"+treat]||""}」 vs 对照${ctrls.join("/")}）\n   VPM ${fmt(s[treat].vpm,2)} vs ${fmt(cVpm,2)}（${(dV>=0?"+":"")+(dV*100).toFixed(1)}%）｜展示率Δ ${(dS>=0?"+":"")+(dS*100).toFixed(1)}%｜SDK eCPM Δ ${(dE>=0?"+":"")+(dE*100).toFixed(1)}%\n   ${concl}`);
+  });
+  return lines.join("\n\n");
 }
 function downloadCsvTemplate(){
   const rows=[
@@ -647,6 +707,60 @@ function downloadCsvTemplate(){
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
   a.download="RPR批量导入模板.csv"; a.click();
 }
+function colIdx(header, names){
+  for(const n of names){ const i=header.findIndex(h=> h.replace(/\s/g,"")===n); if(i>=0) return i; }
+  for(const n of names){ const i=header.findIndex(h=> h.indexOf(n)>=0); if(i>=0) return i; }
+  return -1;
+}
+function importRprRaw(rows){
+  const H=rows[0];
+  const ci={
+    date:colIdx(H,["日期"]), name:colIdx(H,["分组名称"]), exp:colIdx(H,["实验ID"]),
+    rev:colIdx(H,["预估收益"]), req:colIdx(H,["流量请求"]), fillR:colIdx(H,["流量填充率"]),
+    imp:colIdx(H,["展示"])
+  };
+  // 避免“展示/DAU”“展示率”等误匹配：精确取“展示”列
+  ci.imp = H.findIndex(h=> h.trim()==="展示"); if(ci.imp<0) ci.imp=colIdx(H,["展示"]);
+  let byExp={}, added=0;
+  state.experiments.forEach(e=>{ const m=(e.info&&e.info.__src)||null; if(m) byExp[m]=e; });
+  for(let k=1;k<rows.length;k++){
+    const c=rows[k]; if(!c||c.length<5) continue;
+    const date=toISODate(c[ci.date]); const expId=(c[ci.exp]||"").trim();
+    const gl=groupLetter(c[ci.name]); if(!date||!expId||!gl) continue;
+    let e=byExp[expId];
+    if(!e){ e=blankExp("实验 "+expId); e.info.i_placement="实验ID "+expId; e.info.__src=expId; state.experiments.push(e); byExp[expId]=e; }
+    e.info["i_lbl"+gl]=(c[ci.name]||"").trim();
+    const req=num(c[ci.req]), fillRate=num(c[ci.fillR]), imp=num(c[ci.imp]), rev=num(c[ci.rev]);
+    let day=e.days.find(d=>d.date===date);
+    if(!day){ day=blankDay(date); e.days.push(day); }
+    day[gl]={ r:req||"", f: req&&fillRate? Math.round(req*fillRate):"" , i:imp||"", v:rev||"" };
+    added++;
+  }
+  state.experiments.forEach(e=> e.days.sort((a,b)=> (a.date||"").localeCompare(b.date||"")));
+  // 默认切到数据量最大的实验
+  let big=null,bn=-1;
+  state.experiments.forEach(e=>{ const n=(e.days||[]).reduce((s,d)=> s+GROUPS.reduce((x,g)=>x+num(d[g]&&d[g].r),0),0); if(n>bn){bn=n;big=e;} });
+  if(big) state.activeId=big.id;
+  return added;
+}
+function importSimple(rows){
+  if(/广告位|placement/i.test(rows[0][0])||(rows[0][2]&&/组别|group/i.test(rows[0][2]))) rows=rows.slice(1);
+  let added=0, byName={};
+  state.experiments.forEach(e=> byName[expLabel(e)]=e);
+  rows.forEach(c=>{
+    if(c.length<7) return;
+    const name=(c[0]||"").trim(), date=toISODate(c[1]), grp=(c[2]||"").trim().toUpperCase();
+    if(!name||!date||!GROUPS.includes(grp)) return;
+    let e=byName[name];
+    if(!e){ e=blankExp(name); e.info.i_placement=name; state.experiments.push(e); byName[name]=e; }
+    let day=e.days.find(d=>d.date===date);
+    if(!day){ day=blankDay(date); e.days.push(day); }
+    day[grp]={ r:c[3]||"", f:c[4]||"", i:c[5]||"", v:c[6]||"" };
+    added++;
+  });
+  state.experiments.forEach(e=> e.days.sort((a,b)=> (a.date||"").localeCompare(b.date||"")));
+  return added;
+}
 function importCSV(inp){
   const f=inp.files[0]; if(!f) return;
   const r=new FileReader();
@@ -654,26 +768,14 @@ function importCSV(inp){
     try{
       let rows=parseCSV(r.result);
       if(rows.length<2){ alert("CSV 无有效数据行"); inp.value=""; return; }
-      // strip header if first cell non-numeric-ish
-      if(/广告位|placement/i.test(rows[0][0])||rows[0][2]&&/组别|group/i.test(rows[0][2])) rows=rows.slice(1);
-      let added=0, byName={};
-      state.experiments.forEach(e=> byName[expLabel(e)]=e);
-      rows.forEach(c=>{
-        if(c.length<7) return;
-        const name=(c[0]||"").trim(); const date=(c[1]||"").trim(); const grp=(c[2]||"").trim().toUpperCase();
-        if(!name||!date||!GROUPS.includes(grp)) return;
-        let e=byName[name];
-        if(!e){ e=blankExp(name); e.info.i_placement=name; state.experiments.push(e); byName[name]=e; }
-        let day=e.days.find(d=>d.date===date);
-        if(!day){ day=blankDay(date); e.days.push(day); }
-        day[grp]={ r:c[3]||"", f:c[4]||"", i:c[5]||"", v:c[6]||"" };
-        added++;
-      });
-      state.experiments.forEach(e=> e.days.sort((a,b)=> (a.date||"").localeCompare(b.date||"")));
+      const hdr=rows[0].join(",");
+      const isRaw=/分组名称/.test(hdr) && /流量请求/.test(hdr);
+      const added = isRaw ? importRprRaw(rows) : importSimple(rows);
       if(!state.activeId||!state.experiments.find(e=>e.id===state.activeId)) state.activeId=state.experiments[0].id;
       save(false); renderExpSelect(); loadExpToForm();
-      alert(`批量导入完成：写入 ${added} 条组别日数据，当前共 ${state.experiments.length} 个广告位实验。`);
-    }catch(e){ alert("CSV 解析失败，请使用模板格式"); }
+      const summary = analyzeImport();
+      alert(`批量导入完成（${isRaw?"原始导出模板":"简易模板"}）：写入 ${added} 条组别日数据，当前共 ${state.experiments.length} 个实验。\n\n—— 自动分析结论 ——\n\n${summary}\n\n（详见 ②核心数据回收 / ④结论判定 标签页；大盘溢出 A/B/C 完整判定需在 ③ 填入实验前/后大盘数据）`);
+    }catch(e){ alert("CSV 解析失败："+e.message); }
     inp.value="";
   };
   r.readAsText(f);
