@@ -145,7 +145,7 @@
 <div class="container">
   <header class="app-head">
     <h1>RPR 过滤策略 A/B/C/D 实验 · 多广告位数据回收与评估工具</h1>
-    <p>支持多广告位实验并行管理；分组 A=对照(不干预)，B/C/D=策略变体。核心逻辑：算力成本看 SDK 侧绝对值，长期红利看大盘趋势。组别数据务必取自聚合平台 SDK 侧自建统计。</p>
+    <p>多广告位实验同屏对比：B 组固定为 RPR 实验组，A/C/D 为对照组。首页直接看全部实验的周期汇总/大盘溢出/结论判定，无需逐个筛选。组别数据务必取自聚合平台 SDK 侧自建统计。</p>
     <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="verBadge" style="background:rgba(255,255,255,.22);padding:4px 12px;border-radius:14px;font-size:12.5px;font-weight:700;letter-spacing:.3px"></span>
       <span style="font-size:11.5px;opacity:.85">刷新后请核对此版本号/日期，与预期不符多为浏览器缓存——按 Ctrl+F5 强制刷新</span>
@@ -167,161 +167,48 @@
     <button class="btn btn-danger btn-sm" onclick="clearAll()">清空全部</button>
   </div>
 
-  <div class="expbar">
-    <label>当前广告位实验：</label>
-    <select id="expSelect" onchange="switchExp(this.value)"></select>
-    <span class="count-badge" id="expCount"></span>
-    <div class="spacer"></div>
-    <button class="btn btn-primary btn-sm" onclick="newExp()">＋ 新建实验</button>
-    <button class="btn btn-ghost btn-sm" onclick="dupExp()">复制当前</button>
-    <button class="btn btn-danger btn-sm" onclick="delExp()">删除当前</button>
-  </div>
-
   <div class="tabs">
-    <button class="tab-btn active" data-tab="info">① 实验信息登记</button>
-    <button class="tab-btn" data-tab="core">② 核心数据回收（SDK侧·ABCD）</button>
-    <button class="tab-btn" data-tab="spill">③ 大盘溢出效应对比</button>
-    <button class="tab-btn" data-tab="verdict">④ 结论判定矩阵</button>
+    <button class="tab-btn active" data-tab="overview">① 结果总览（首页 · 全部实验同屏）</button>
+    <button class="tab-btn" data-tab="detail">② 数据录入与详情</button>
+    <span class="count-badge" id="expCount" style="align-self:center;margin-left:auto"></span>
   </div>
 
-  <!-- ① 实验信息 -->
-  <section class="panel active" id="tab-info">
-    <h2>一、实验基本信息登记（当前广告位）</h2>
-    <div class="grid2">
-      <div class="field"><label>实验名称</label><input id="i_name" placeholder="如：生活服务类 Android 插屏 RPR 过滤探测实验"></div>
-      <div class="field"><label>实验广告位 Placement_ID</label><input id="i_placement" placeholder="Placement_ID_XXXX"></div>
-      <div class="field"><label>底层共用广告源 Unit ID</label><input id="i_unit" placeholder="ca-app-pub-xxx (AdMob Unit)"></div>
-      <div class="field"><label>流量分流比例</label><input id="i_split" placeholder="A:25% | B:25% | C:25% | D:25%（设备级随机）"></div>
-      <div class="field"><label>实验观察周期 · 开始</label><input id="i_start" type="date"></div>
-      <div class="field"><label>实验观察周期 · 结束</label><input id="i_end" type="date"></div>
-      <div class="field"><label>策略参数 Base_Rate</label><input id="i_baserate" placeholder="如：20%"></div>
-      <div class="field"><label>策略参数 T（过滤护栏阈值）</label><input id="i_T" placeholder="如：大盘中位数"></div>
-      <div class="field"><label>A 组策略说明（对照）</label><input id="i_lblA" placeholder="不干预 · 对照组"></div>
-      <div class="field"><label>B 组策略说明</label><input id="i_lblB" placeholder="如：RPR过滤 Base_Rate=20%"></div>
-      <div class="field"><label>C 组策略说明</label><input id="i_lblC" placeholder="如：RPR过滤 Base_Rate=10%"></div>
-      <div class="field"><label>D 组策略说明</label><input id="i_lblD" placeholder="如：RPR过滤 + 词表v2"></div>
-      <div class="field" style="grid-column:1/-1"><label>备注 / 词表版本 / 风险点</label><textarea id="i_note" placeholder="记录当前激活的过滤护栏公式、词表版本、风险点等"></textarea></div>
-    </div>
-    <div class="hint">观察周期建议 ≥14 天（覆盖两个完整自然周）。A 组固定为不干预对照，B/C/D 为不同策略/参数变体；只填用到的组即可，留空组不参与评估。</div>
+  <!-- 首页：结果总览（全部实验同屏） -->
+  <section class="panel active" id="tab-overview">
+    <h2>结果总览 · 全部实验同屏对比</h2>
+    <div class="hint"><strong>B 组固定为 RPR 实验组</strong>，A/C/D 一律对照组。下方按实验逐个展示「周期汇总评估 → 大盘溢出效应 → 结论判定」三个模块，无需切换筛选，可直接纵向对比多个广告位实验。原始数据录入/详情在第二页。</div>
+    <div id="overviewList"></div>
   </section>
 
-  <!-- ② 核心数据回收 -->
-  <section class="panel" id="tab-core">
-    <h2>二、核心数据回收表（核心看板 · SDK 侧归因）</h2>
-    <div class="hint warn">⚠️ 组别维度（A/B/C/D）数据<strong>必须全部取自聚合平台 SDK 侧自建统计</strong>，不能看广告平台后台。每天每组录入 4 个原始值（请求/填充/展示/预估收益），其余指标自动计算。</div>
-
+  <!-- 第二页：数据录入与详情 -->
+  <section class="panel" id="tab-detail">
+    <h2>数据录入与详情</h2>
     <div class="row-actions">
-      <button class="btn btn-primary btn-sm" onclick="addDay()">＋ 新增一天</button>
-      <button class="btn btn-ghost btn-sm" onclick="genDaysFromPeriod()">按周期批量生成日期行</button>
-      <span class="save-state">逐日录入后，下方“周期汇总”自动计算 展示率 / VPM / IPM / SDK eCPM，并标注 B/C/D vs A</span>
+      <button class="btn btn-primary btn-sm" onclick="newExp()">＋ 新增空白实验</button>
+      <span class="save-state">每个实验含「实验信息登记 + 逐日核心数据明细表」；多数情况下用顶部"批量导入CSV"一次导入多个实验ID即可。修改后首页结果实时刷新。</span>
     </div>
+    <div class="hint warn">⚠️ 组别维度（A/B/C/D）数据<strong>必须全部取自聚合平台 SDK 侧自建统计</strong>，不能看广告平台后台。每天每组 4 个原始值：请求/填充/展示/预估收益，其余指标在首页自动计算。</div>
+    <div id="detailList"></div>
 
-    <div class="table-wrap">
-      <table id="dailyTable">
-        <thead>
-          <tr id="dailyHead1"></tr>
-          <tr id="dailyHead2"></tr>
-        </thead>
-        <tbody id="dailyBody"></tbody>
-        <tfoot><tr id="dailyFoot" style="font-weight:700;background:#eef4fb"></tr></tfoot>
-      </table>
-    </div>
-
-    <h3>周期汇总评估表（自动计算）</h3>
-    <div class="table-wrap">
-      <table id="summaryTable">
-        <thead><tr id="summaryHead"></tr></thead>
-        <tbody id="summaryBody"></tbody>
-      </table>
-    </div>
-    <div class="hint"><strong>B 组固定为 RPR 实验组</strong>，A/C/D 一律为<strong>对照组</strong>；"对照组合计"列为对照组（A+C+D 中有数据者）求和后的基准。实验组(B)单元格下方小字为相对"对照组合计"的变化（绿=向好 / 红=向坏 / 灰=未达 5% 显著阈值）。流量占比取自原始数据"权重"列。</div>
+    <section id="changelogBox" style="margin-top:18px;background:#fbfcfe;border:1px solid #edf0f5;border-radius:10px;padding:20px 22px">
+      <h2>版本与更新日志</h2>
+      <p id="verLine" style="font-size:13.5px;margin-bottom:10px"></p>
+      <div class="hint">用法：每次反馈"已修改"后刷新本页，对比顶部/此处版本号与日期；若不变请按 <strong>Ctrl+F5</strong> 强制刷新清缓存。版本号仍不变才说明部署未生效。</div>
+      <div class="table-wrap">
+        <table><thead><tr><th style="width:90px">版本</th><th style="width:110px">日期</th><th style="text-align:left">变更内容</th></tr></thead>
+        <tbody id="changelogBody"></tbody></table>
+      </div>
+    </section>
   </section>
 
-  <!-- ③ 大盘溢出 -->
-  <section class="panel" id="tab-spill">
-    <h2>三、"外在溢出效应" 大盘前后对比表（当前广告位 Unit）</h2>
-    <div class="hint">大盘总计 = <strong>A+B+C+D 四组日合计</strong>，由②核心数据回收自动汇总，<strong>实时同步、无需手填</strong>。前/后两列分别为"数据期前 7 天均值"与"数据期后 7 天均值"（按日期排序后取首尾各最多 7 天；请求/收益为日均值，填充率/eCPM 为窗口聚合值）。</div>
-    <div id="spillWindow" style="font-size:12.5px;color:#4a5568;margin:6px 0 12px"></div>
-    <div class="table-wrap">
-      <table id="spillTable">
-        <thead>
-          <tr><th style="text-align:left">评估指标（Unit 大盘总计 = ΣABCD）</th><th>数据期前 7 天均值</th><th>数据期后 7 天均值</th><th>理想形态</th><th>实际变化</th><th>溢出价值判定</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td class="metric-name">大盘总请求数（日均）</td>
-            <td class="calc muted" id="sp_req_pre"></td>
-            <td class="calc muted" id="sp_req_post"></td>
-            <td><span class="dir down">整体下降 ⬇️</span></td>
-            <td class="calc" id="sp_req_delta"></td>
-            <td style="text-align:left;font-size:12.5px">广告位服务器请求压力下降</td>
-          </tr>
-          <tr>
-            <td class="metric-name">广告平台真实填充率 %</td>
-            <td class="calc muted" id="sp_fill_pre"></td>
-            <td class="calc muted" id="sp_fill_post"></td>
-            <td><span class="dir up">整体拔高 ⬆️</span></td>
-            <td class="calc" id="sp_fill_delta"></td>
-            <td style="text-align:left;font-size:12.5px">平台算法感知流量变好，愿意给填充</td>
-          </tr>
-          <tr>
-            <td class="metric-name">大盘整体真实 eCPM</td>
-            <td class="calc muted" id="sp_ecpm_pre"></td>
-            <td class="calc muted" id="sp_ecpm_post"></td>
-            <td><span class="dir up">整体溢价 ⬆️</span></td>
-            <td class="calc" id="sp_ecpm_delta"></td>
-            <td style="text-align:left;font-size:12.5px"><strong>核心红利！</strong>平台算法调高该 Unit 整体出价</td>
-          </tr>
-          <tr>
-            <td class="metric-name">大盘总收益（日均）</td>
-            <td class="calc muted" id="sp_rev_pre"></td>
-            <td class="calc muted" id="sp_rev_post"></td>
-            <td><span class="dir up">Rev_post ≥ Rev_pre</span></td>
-            <td class="calc" id="sp_rev_delta"></td>
-            <td style="text-align:left;font-size:12.5px"><strong>最终大决战指标！</strong>证明"降本且增效"</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ④ 结论判定 -->
-  <section class="panel" id="tab-verdict">
-    <h2>四、实验结论判定矩阵（运营决策 SOP · 当前广告位）</h2>
-    <div class="kpi-row" id="kpiRow"></div>
-    <div id="verdictBox"></div>
-    <div id="recoBox"></div>
-
-    <h3>四象限决策参考（B 实验组 vs 对照组(A/C/D)合计；大盘溢出为 ΣABCD 自动计算）</h3>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>情况</th><th>数据表现</th><th>业务结论与下阶段决策</th></tr></thead>
-        <tbody>
-          <tr><td><strong style="color:#2f855a">A 完美通关</strong></td><td style="text-align:left">VPM_实验组 &gt; VPM_对照合计 且 大盘总收益 后 &gt; 前</td><td style="text-align:left">实验组榨干请求效率 + 大盘溢价，盘子变大。<strong>逐步扩大该实验组灰度比例。</strong></td></tr>
-          <tr><td><strong style="color:#3182ce">B 防守成功</strong></td><td style="text-align:left">VPM_实验组 &gt; VPM_对照合计 且 大盘总收益持平，但大盘总请求下降约30%</td><td style="text-align:left">收益持平但算力/带宽大幅节省，收益质量变高。<strong>符合战略预期，可全量。</strong></td></tr>
-          <tr><td><strong style="color:#c53030">C 误杀现金牛</strong></td><td style="text-align:left">VPM_实验组 与 对照合计 拉不开差距，且大盘总收益 后 下跌</td><td style="text-align:left">过滤过激触发恶性循环或词表不准。<strong>立刻人工熔断，调高 Base_Rate 兜底或退回回测重校准词表。</strong></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="hint">判定为自动启发式建议（大盘溢出 = A+B+C+D 日合计，按数据期前/后段比较，所有实验组共享同一组大盘前后对比）。"显著"阈值默认相对差异 ≥5%，可在源码 <code>SIG</code> 常量调整。最终需结合显著性检验与业务判断。</div>
-  </section>
-
-  <section id="changelogBox" style="margin-top:16px;background:#fff;border-radius:10px;padding:22px 24px;box-shadow:0 2px 10px rgba(0,0,0,.04)">
-    <h2>版本与更新日志</h2>
-    <p id="verLine" style="font-size:13.5px;margin-bottom:10px"></p>
-    <div class="hint">用法：每次反馈"已修改"后刷新本页，对比顶部/此处版本号与日期；若不变请按 <strong>Ctrl+F5</strong> 强制刷新清缓存。版本号仍不变才说明部署未生效。</div>
-    <div class="table-wrap">
-      <table><thead><tr><th style="width:90px">版本</th><th style="width:110px">日期</th><th style="text-align:left">变更内容</th></tr></thead>
-      <tbody id="changelogBody"></tbody></table>
-    </div>
-  </section>
   <footer>RPR 过滤策略 A/B/C/D 多广告位实验数据回收工具 · 数据仅保存在本地浏览器，导出 JSON 可批量备份/交接 · 通过 Claude Code 修改源码后重新部署即可更新分享链接</footer>
 </div>
 
 <script>
-const APP_VERSION = "v1.5.1";
+const APP_VERSION = "v1.6.0";
 const BUILD_DATE = "2026-05-19";
 const CHANGELOG = [
+  ["v1.6.0","2026-05-19","去掉实验下拉筛选，改为「全部实验同屏」：首页按实验逐个展示 周期汇总/大盘溢出/结论判定，可直接对比多个实验ID；第二页为 实验信息登记+逐日明细表+版本日志，新增空白实验在此页"],
   ["v1.5.1","2026-05-19","实验/对照判定写死：B 组固定为 RPR 实验组，A/C/D 一律对照组（不再依赖分组名称含 rpr 关键词）"],
   ["v1.5.0","2026-05-19","②④分析全面改为 rpr=实验组/其余=对照组（含流量占比、对照组合计基准）；③大盘溢出改为按 A+B+C+D 日合计自动计算（数据期前7天均值 vs 后7天均值），随数据实时同步；新建/导入实验名称去重并置顶显示"],
   ["v1.4.0","2026-05-19","新增可见版本号/构建日期与更新日志，便于刷新后确认部署是否生效（含缓存提示）"],
@@ -359,183 +246,41 @@ document.querySelectorAll(".tab-btn").forEach(b=>{
   };
 });
 
-/* ---------- experiment manager ---------- */
+/* ---------- helpers ---------- */
+function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
 function expLabel(e){ const i=e.info||{}; return (i.i_name||"").trim() || (i.i_placement||"").trim() || "未命名实验"; }
-function renderExpSelect(){
-  const sel=document.getElementById("expSelect");
-  sel.innerHTML = state.experiments.map(e=>`<option value="${e.id}" ${e.id===state.activeId?"selected":""}>${expLabel(e)}</option>`).join("");
-  document.getElementById("expCount").textContent = `共 ${state.experiments.length} 个广告位实验`;
-}
-function loadExpToForm(){
-  const e=activeExp(); if(!e) return;
-  INFO_FIELDS.forEach(id=> document.getElementById(id).value = (e.info&&e.info[id]!=null)?e.info[id]:"");
-  renderDays(); recalc();
-}
-function switchExp(id){ collectActive(); state.activeId=id; save(false); loadExpToForm(); renderExpSelect(); }
 function uniqueName(base){
   const names=new Set(state.experiments.map(x=>expLabel(x)));
   if(!names.has(base)) return base;
   let i=2; while(names.has(`${base} (${i})`)) i++;
   return `${base} (${i})`;
 }
-function newExp(){
-  collectActive();
-  const e=blankExp(uniqueName("新广告位实验 "+(new Date().toISOString().slice(5,10).replace("-",""))+"-"+(Math.floor(Math.random()*900)+100)));
-  state.experiments.unshift(e); state.activeId=e.id;
-  save(false); renderExpSelect(); loadExpToForm();
-}
-function dupExp(){
-  collectActive();
-  const cur=activeExp(); if(!cur){ return; }
-  const copy=JSON.parse(JSON.stringify(cur));
-  copy.id=uid(); copy.info=copy.info||{}; if(copy.info.__src) delete copy.info.__src;
-  copy.info.i_name=uniqueName(expLabel(cur)+" 副本");
-  state.experiments.unshift(copy); state.activeId=copy.id;
-  save(false); renderExpSelect(); loadExpToForm();
-}
-function delExp(){
-  const e=activeExp(); if(!e) return;
-  if(!confirm(`确认删除实验「${expLabel(e)}」？该广告位全部录入数据将被清除，不可恢复。`)) return;
-  state.experiments=state.experiments.filter(x=>x.id!==e.id);
-  if(!state.experiments.length) state.experiments.push(blankExp("新广告位实验 1"));
-  state.activeId=state.experiments[0].id;
-  save(false); renderExpSelect(); loadExpToForm();
-}
-
-/* ---------- daily table (4 groups) ---------- */
-function renderDailyHead(){
-  const e=activeExp()||{info:{}};
-  let h1=`<th rowspan="2">日期</th>`;
-  GROUPS.forEach(g=>{
-    const lbl=(e.info&&e.info["i_lbl"+g])? e.info["i_lbl"+g] : GROUP_DESC[g];
-    h1+=`<th colspan="4" class="grp-${g}">${g} 组 · ${lbl}</th>`;
-  });
-  h1+=`<th rowspan="2" class="no-print">操作</th>`;
-  document.getElementById("dailyHead1").innerHTML=h1;
-  let h2="";
-  GROUPS.forEach(g=> h2+=`<th class="grp-${g}">请求</th><th class="grp-${g}">填充</th><th class="grp-${g}">展示</th><th class="grp-${g}">收益</th>`);
-  document.getElementById("dailyHead2").innerHTML=h2;
-}
-function renderDays(){
-  renderDailyHead();
-  const e=activeExp(); if(!e){ document.getElementById("dailyBody").innerHTML=""; return; }
-  document.getElementById("dailyBody").innerHTML = e.days.map((d,idx)=>{
-    let cells=`<td><input type="date" value="${d.date||""}" oninput="upd(${idx},'date',null,this.value)" style="text-align:center;min-width:130px"></td>`;
-    GROUPS.forEach(g=>{
-      ["r","f","i","v"].forEach(fk=>{
-        const step=fk==="v"?' step="0.01"':"";
-        cells+=`<td class="grp-${g}"><input type="number"${step} value="${(d[g]&&d[g][fk]!=null)?d[g][fk]:""}" oninput="upd(${idx},'${g}','${fk}',this.value)"></td>`;
-      });
-    });
-    cells+=`<td class="no-print"><button class="btn btn-danger btn-sm" onclick="delDay(${idx})">删</button></td>`;
-    return `<tr>${cells}</tr>`;
-  }).join("");
-}
-function addDay(date){ const e=activeExp(); if(!e) return; e.days.push(blankDay(date)); renderDays(); save(); recalc(); }
-function delDay(i){ const e=activeExp(); if(!e) return; e.days.splice(i,1); renderDays(); save(); recalc(); }
-function upd(i,a,b,v){
-  const e=activeExp(); if(!e) return;
-  if(a==="date") e.days[i].date=v; else e.days[i][a][b]=v;
-  save(); recalc();
-}
-function genDaysFromPeriod(){
-  const e=activeExp(); if(!e) return;
-  const s=document.getElementById("i_start").value, en=document.getElementById("i_end").value;
-  if(!s||!en){ alert("请先在【实验信息登记】填写实验周期起止日期"); return; }
-  const sd=new Date(s), ed=new Date(en);
-  if(sd>ed){ alert("开始日期不能晚于结束日期"); return; }
-  if(e.days.length && !confirm("将按周期重新生成日期行，当前广告位已录入数据会被清空，确认？")) return;
-  e.days=[];
-  for(let dt=new Date(sd); dt<=ed; dt.setDate(dt.getDate()+1)) e.days.push(blankDay(dt.toISOString().slice(0,10)));
-  renderDays(); save(); recalc();
-}
-
-/* ---------- aggregation ---------- */
-function totals(){
-  const e=activeExp(); const t={}; GROUPS.forEach(g=> t[g]={r:0,f:0,i:0,v:0});
-  if(e) e.days.forEach(d=> GROUPS.forEach(g=>{ const c=d[g]||{}; t[g].r+=num(c.r); t[g].f+=num(c.f); t[g].i+=num(c.i); t[g].v+=num(c.v); }));
-  return t;
-}
+function findExp(id){ return state.experiments.find(e=>e.id===id); }
 function derived(o){ return {
-  showRate: o.f>0? o.i/o.f : NaN,
-  vpm: o.r>0? o.v/o.r*1000 : NaN,
-  ipm: o.r>0? o.i/o.r*1000 : NaN,
-  ecpm: o.i>0? o.v/o.i*1000 : NaN,
-}; }
+  showRate:o.f>0?o.i/o.f:NaN, vpm:o.r>0?o.v/o.r*1000:NaN, ipm:o.r>0?o.i/o.r*1000:NaN, ecpm:o.i>0?o.v/o.i*1000:NaN }; }
 function hasData(o){ return o.r>0||o.f>0||o.i>0||o.v>0; }
-function isTreat(e,g){ return g==="B"; } // 写死：B 组为 RPR 实验组，A/C/D 均为对照组
-function grpWeight(e,g){ const w=e&&e.info&&e.info.__w; return (w&&w[g]!=null)? w[g] : null; }
-// 角色划分：B 组写死为 RPR 实验组，A/C/D 为对照组；对照组按合计(sum)作基准
-function roleModel(t){
-  const e=activeExp()||{info:{}};
+function isTreat(e,g){ return g==="B"; } // 写死：B=RPR实验组，A/C/D=对照组
+function grpWeight(e,g){ const w=e&&e.info&&e.info.__w; return (w&&w[g]!=null)?w[g]:null; }
+function totalsOf(e){ const t={}; GROUPS.forEach(g=>t[g]={r:0,f:0,i:0,v:0});
+  ((e&&e.days)||[]).forEach(d=>GROUPS.forEach(g=>{const c=d[g]||{}; t[g].r+=num(c.r);t[g].f+=num(c.f);t[g].i+=num(c.i);t[g].v+=num(c.v);})); return t; }
+function roleModelOf(e,t){
   const present=GROUPS.filter(g=>hasData(t[g]));
   const treat=present.filter(g=>isTreat(e,g));
   const ctrl=present.filter(g=>!isTreat(e,g));
-  const cAgg={r:0,f:0,i:0,v:0}; ctrl.forEach(g=>{ cAgg.r+=t[g].r; cAgg.f+=t[g].f; cAgg.i+=t[g].i; cAgg.v+=t[g].v; });
+  const cAgg={r:0,f:0,i:0,v:0}; ctrl.forEach(g=>{cAgg.r+=t[g].r;cAgg.f+=t[g].f;cAgg.i+=t[g].i;cAgg.v+=t[g].v;});
   return { e, present, treat, ctrl, cAgg, cDer:derived(cAgg) };
 }
 function relDelta(b,a){ if(a===0) return b===0?0:Infinity; return (b-a)/Math.abs(a); }
 function deltaInfo(b,a,goodDir){
   const r=relDelta(b,a);
-  if(!isFinite(r)) return {txt:"", cls:"neu"};
+  if(!isFinite(r)) return {txt:"",cls:"neu"};
   let cls;
   if(goodDir==="flat") cls=Math.abs(r)<SIG?"pos":"neg";
   else cls=Math.abs(r)<SIG?"neu":((r>0)===(goodDir==="up")?"pos":"neg");
-  return {txt:(r>=0?"+":"")+(r*100).toFixed(1)+"%", cls};
+  return {txt:(r>=0?"+":"")+(r*100).toFixed(1)+"%",cls};
 }
-
-function fmtKind(k,x){ return k==="pct"?pct(x): k==="int"?fmt(x): fmt(x,2); }
-function renderSummary(){
-  const t=totals();
-  const der={}; GROUPS.forEach(g=> der[g]=derived(t[g]));
-  const rm=roleModel(t); const e=rm.e;
-  let head=`<th style="text-align:left">观测指标（SDK 侧归因）</th>`;
-  GROUPS.forEach(g=>{
-    const lbl=(e.info&&e.info["i_lbl"+g])||GROUP_DESC[g];
-    const w=grpWeight(e,g); const wt=w!=null?` · 流量${w}%`:"";
-    let role="<span class='dir flat' style='opacity:.4'>无数据</span>";
-    if(hasData(t[g])) role= rm.treat.includes(g)? "<span class='dir up'>实验组(B·RPR)</span>" : "<span class='dir down'>对照组</span>";
-    head+=`<th class="grp-${g}">${g} · ${lbl}${wt}<br>${role}</th>`;
-  });
-  head+=`<th class="grp-A">对照组合计<br><span class='dir flat'>基准(${rm.ctrl.join("+")||"—"})</span></th><th>预期方向</th><th>业务结论 / 佐证</th>`;
-  document.getElementById("summaryHead").innerHTML=head;
-
-  const metrics=[
-    {n:"1. 总请求数 Requests", kind:"int", raw:(o,d)=>o.r, gd:"down", exp:"实验组显著下降 ⬇️", note:"核心降本指标，评估拦截了多少无效请求"},
-    {n:"2. 总填充数 Fills", kind:"int", raw:(o,d)=>o.f, gd:"down", exp:"下降 ⬇️", note:"伴随请求下降，整体填充同步收缩"},
-    {n:"3. 总展示数 Imps", kind:"int", raw:(o,d)=>o.i, gd:"flat", exp:"基本持平/微跌 ➡️", note:"证明过滤掉的是不会产生展示的垃圾请求"},
-    {n:"4. 展示转化率 Show Rate", kind:"pct", raw:(o,d)=>d.showRate, gd:"up", exp:"显著提升 ⬆️", note:"核心效率指标！验证实验组流量质量变纯净"},
-    {n:"5. 组内预估收益 Est.Rev", kind:"rev", raw:(o,d)=>o.v, gd:"flat", exp:"持平/允许微亏 ➡️", note:"绝不能断崖式下跌，否则说明误杀"},
-    {n:"6. 千次请求收益 VPM", kind:"rev", raw:(o,d)=>d.vpm, gd:"up", exp:"实验组大幅跑赢对照 ⬆️", note:"破局第一指标！单位请求变现效率"},
-    {n:"7. 千次请求展示 IPM", kind:"rev", raw:(o,d)=>d.ipm, gd:"up", exp:"实验组大幅跑赢对照 ⬆️", note:"辅助证明实验组请求的含金量"},
-    {n:"8. SDK 端 eCPM", kind:"rev", raw:(o,d)=>d.ecpm, gd:"flat", exp:"几乎持平 ➡️", note:"受共有实体污染，各组单价通常趋同"},
-  ];
-  document.getElementById("summaryBody").innerHTML = metrics.map(m=>{
-    let cells=`<td class="metric-name">${m.n}</td>`;
-    const cBase=m.raw(rm.cAgg, rm.cDer);
-    GROUPS.forEach(g=>{
-      const has=hasData(t[g]); const isT=rm.treat.includes(g);
-      let sub="";
-      if(has && isT && rm.ctrl.length){
-        const di=deltaInfo(m.raw(t[g],der[g]), cBase, m.gd);
-        if(di.txt) sub=`<span class="vsa ${di.cls}">vs对照 ${di.txt}</span>`;
-      }
-      cells+=`<td class="calc${isT?"":" muted"} grp-${g}">${has?fmtKind(m.kind,m.raw(t[g],der[g])):"—"}${sub}</td>`;
-    });
-    cells+=`<td class="calc grp-A">${rm.ctrl.length?fmtKind(m.kind,cBase):"—"}</td><td>${m.exp}</td><td style="text-align:left;font-size:12px">${m.note}</td>`;
-    return `<tr>${cells}</tr>`;
-  }).join("");
-
-  let foot=`<td class="metric-name">周期合计</td>`;
-  GROUPS.forEach(g=>{ foot+=`<td class="calc grp-${g}">${fmt(t[g].r)}</td><td class="calc grp-${g}">${fmt(t[g].f)}</td><td class="calc grp-${g}">${fmt(t[g].i)}</td><td class="calc grp-${g}">${fmt(t[g].v,2)}</td>`; });
-  foot+=`<td class="no-print"></td>`;
-  document.getElementById("dailyFoot").innerHTML=foot;
-  return {der,t,rm};
-}
-
-/* ---------- spill (auto = ΣABCD daily) ---------- */
-function computeSpill(){
-  const e=activeExp();
+function fmtKind(k,x){ return k==="pct"?pct(x):k==="int"?fmt(x):fmt(x,2); }
+function computeSpillOf(e){
   const days=((e&&e.days)||[]).filter(d=>d.date).slice().sort((a,b)=>a.date.localeCompare(b.date));
   const tot=days.map(d=>{ let r=0,f=0,i=0,v=0; GROUPS.forEach(g=>{const c=d[g]||{}; r+=num(c.r);f+=num(c.f);i+=num(c.i);v+=num(c.v);}); return {date:d.date,r,f,i,v}; });
   const n=tot.length;
@@ -543,33 +288,13 @@ function computeSpill(){
   if(n<2){ preArr=tot; postArr=tot; }
   else { const preC=Math.min(7,Math.floor(n/2)); const postC=Math.min(7,n-preC); preArr=tot.slice(0,preC); postArr=tot.slice(n-postC); }
   const agg=arr=>{ let r=0,f=0,i=0,v=0; arr.forEach(x=>{r+=x.r;f+=x.f;i+=x.i;v+=x.v;}); const c=arr.length||1;
-    return { reqAvg:r/c, revAvg:v/c, fillPct:r>0?f/r*100:NaN, ecpm:i>0?v/i*1000:NaN }; };
-  const A=agg(preArr), B=agg(postArr);
-  const lbl=arr=> arr.length? `${arr[0].date} ~ ${arr[arr.length-1].date}（${arr.length}天）` : "—";
-  return { n,
-    req:{pre:A.reqAvg,post:B.reqAvg}, rev:{pre:A.revAvg,post:B.revAvg},
-    fill:{pre:A.fillPct,post:B.fillPct}, ecpm:{pre:A.ecpm,post:B.ecpm},
-    preLabel:lbl(preArr), postLabel:lbl(postArr) };
+    return { reqAvg:r/c,revAvg:v/c,fillPct:r>0?f/r*100:NaN,ecpm:i>0?v/i*1000:NaN }; };
+  const A=agg(preArr),B=agg(postArr);
+  const lbl=arr=>arr.length?`${arr[0].date} ~ ${arr[arr.length-1].date}（${arr.length}天）`:"—";
+  return { n, req:{pre:A.reqAvg,post:B.reqAvg}, rev:{pre:A.revAvg,post:B.revAvg},
+    fill:{pre:A.fillPct,post:B.fillPct}, ecpm:{pre:A.ecpm,post:B.ecpm}, preLabel:lbl(preArr), postLabel:lbl(postArr) };
 }
-function renderSpill(){
-  const sp=computeSpill();
-  const setv=(id,val,kind)=>{ const el=document.getElementById(id); if(el) el.textContent=isFinite(val)?(kind==="pct"?val.toFixed(2)+"%":kind==="int"?fmt(Math.round(val)):fmt(val,2)):"—"; };
-  setv("sp_req_pre",sp.req.pre,"int"); setv("sp_req_post",sp.req.post,"int");
-  setv("sp_fill_pre",sp.fill.pre,"pct"); setv("sp_fill_post",sp.fill.post,"pct");
-  setv("sp_ecpm_pre",sp.ecpm.pre,"rev"); setv("sp_ecpm_post",sp.ecpm.post,"rev");
-  setv("sp_rev_pre",sp.rev.pre,"rev"); setv("sp_rev_post",sp.rev.post,"rev");
-  const setd=(id,b,a,gd)=>{ const el=document.getElementById(id); if(!el) return; const di=deltaInfo(b,a,gd); el.innerHTML=di.txt?`<span class="${di.cls}">${di.txt}</span>`:"—"; };
-  setd("sp_req_delta",sp.req.post,sp.req.pre,"down");
-  setd("sp_fill_delta",sp.fill.post,sp.fill.pre,"up");
-  setd("sp_ecpm_delta",sp.ecpm.post,sp.ecpm.pre,"up");
-  setd("sp_rev_delta",sp.rev.post,sp.rev.pre,"up");
-  const w=document.getElementById("spillWindow");
-  if(w) w.innerHTML = sp.n? `数据期共 <strong>${sp.n}</strong> 天　｜　前段：<strong>${sp.preLabel}</strong>　vs　后段：<strong>${sp.postLabel}</strong>${sp.n<14?`　<span class="neg">（不足14天，前后窗口取数据期前/后半段）</span>`:""}` : "当前实验暂无带日期的数据";
-  return sp;
-}
-
-/* ---------- verdict ---------- */
-function classify(vd, rd, qd){
+function classify(vd,rd,qd){
   const vpmWin=vd>SIG, vpmFlat=Math.abs(vd)<=SIG;
   const revUp=rd>SIG, revFlat=Math.abs(rd)<=SIG, revDown=rd<-SIG;
   const reqDrop=qd<=-0.30;
@@ -578,89 +303,242 @@ function classify(vd, rd, qd){
   if(vpmFlat&&revDown) return {cls:"C",tag:"C",title:"误杀现金牛，恶性循环",lis:["VPM 与对照拉不开差距且大盘总收益下跌，疑似低流量死锁或词表不准。","<strong>决策：立刻人工熔断，调高 Base_Rate 兜底或退回回测重校准。</strong>"]};
   return {cls:"none",tag:"none",title:"混合信号 · 需人工研判",lis:[`VPM vs 对照 ${(vd*100).toFixed(1)}%；大盘收益 ${(rd*100).toFixed(1)}%；大盘请求 ${(qd*100).toFixed(1)}%`,"未命中 A/B/C 标准组合，建议结合显著性检验人工判断。"]};
 }
-function renderVerdict(agg, sp){
-  const der=agg.der, t=agg.t, rm=agg.rm;
+
+/* ---------- per-experiment HTML builders ---------- */
+const SUM_METRICS=[
+  {n:"1. 总请求数 Requests", kind:"int", raw:(o,d)=>o.r, gd:"down", exp:"实验组显著下降 ⬇️", note:"核心降本指标，评估拦截了多少无效请求"},
+  {n:"2. 总填充数 Fills", kind:"int", raw:(o,d)=>o.f, gd:"down", exp:"下降 ⬇️", note:"伴随请求下降，整体填充同步收缩"},
+  {n:"3. 总展示数 Imps", kind:"int", raw:(o,d)=>o.i, gd:"flat", exp:"基本持平/微跌 ➡️", note:"证明过滤掉的是不会产生展示的垃圾请求"},
+  {n:"4. 展示转化率 Show Rate", kind:"pct", raw:(o,d)=>d.showRate, gd:"up", exp:"显著提升 ⬆️", note:"核心效率指标！验证实验组流量质量变纯净"},
+  {n:"5. 组内预估收益 Est.Rev", kind:"rev", raw:(o,d)=>o.v, gd:"flat", exp:"持平/允许微亏 ➡️", note:"绝不能断崖式下跌，否则说明误杀"},
+  {n:"6. 千次请求收益 VPM", kind:"rev", raw:(o,d)=>d.vpm, gd:"up", exp:"实验组大幅跑赢对照 ⬆️", note:"破局第一指标！单位请求变现效率"},
+  {n:"7. 千次请求展示 IPM", kind:"rev", raw:(o,d)=>d.ipm, gd:"up", exp:"实验组大幅跑赢对照 ⬆️", note:"辅助证明实验组请求的含金量"},
+  {n:"8. SDK 端 eCPM", kind:"rev", raw:(o,d)=>d.ecpm, gd:"flat", exp:"几乎持平 ➡️", note:"受共有实体污染，各组单价通常趋同"},
+];
+function summaryHTML(e,t,der,rm){
+  let head=`<th style="text-align:left">观测指标（SDK 侧归因）</th>`;
+  GROUPS.forEach(g=>{
+    const lbl=(e.info&&e.info["i_lbl"+g])||GROUP_DESC[g];
+    const w=grpWeight(e,g); const wt=w!=null?` · 流量${w}%`:"";
+    let role="<span class='dir flat' style='opacity:.4'>无数据</span>";
+    if(hasData(t[g])) role= rm.treat.includes(g)? "<span class='dir up'>实验组(B·RPR)</span>" : "<span class='dir down'>对照组</span>";
+    head+=`<th class="grp-${g}">${g} · ${esc(lbl)}${wt}<br>${role}</th>`;
+  });
+  head+=`<th class="grp-A">对照组合计<br><span class='dir flat'>基准(${rm.ctrl.join("+")||"—"})</span></th><th>预期方向</th><th>业务结论 / 佐证</th>`;
+  const body=SUM_METRICS.map(m=>{
+    let cells=`<td class="metric-name">${m.n}</td>`;
+    const cBase=m.raw(rm.cAgg, rm.cDer);
+    GROUPS.forEach(g=>{
+      const has=hasData(t[g]); const isT=rm.treat.includes(g);
+      let sub="";
+      if(has && isT && rm.ctrl.length){ const di=deltaInfo(m.raw(t[g],der[g]),cBase,m.gd); if(di.txt) sub=`<span class="vsa ${di.cls}">vs对照 ${di.txt}</span>`; }
+      cells+=`<td class="calc${isT?"":" muted"} grp-${g}">${has?fmtKind(m.kind,m.raw(t[g],der[g])):"—"}${sub}</td>`;
+    });
+    cells+=`<td class="calc grp-A">${rm.ctrl.length?fmtKind(m.kind,cBase):"—"}</td><td>${m.exp}</td><td style="text-align:left;font-size:12px">${m.note}</td>`;
+    return `<tr>${cells}</tr>`;
+  }).join("");
+  return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+function spillHTML(e,sp){
+  const win = sp.n? `数据期共 <strong>${sp.n}</strong> 天　｜　前段：<strong>${sp.preLabel}</strong>　vs　后段：<strong>${sp.postLabel}</strong>${sp.n<14?`　<span class="neg">（不足14天，前后取数据期前/后半段）</span>`:""}` : "该实验暂无带日期的数据";
+  const cell=(v,kind)=> isFinite(v)?(kind==="pct"?v.toFixed(2)+"%":kind==="int"?fmt(Math.round(v)):fmt(v,2)):"—";
+  const dcell=(b,a,gd)=>{ const di=deltaInfo(b,a,gd); return di.txt?`<span class="${di.cls}">${di.txt}</span>`:"—"; };
+  const rows=[
+    ["大盘总请求数（日均）",sp.req,"int","down","广告位服务器请求压力下降"],
+    ["广告平台真实填充率 %",sp.fill,"pct","up","平台算法感知流量变好，愿意给填充"],
+    ["大盘整体真实 eCPM",sp.ecpm,"rev","up","<strong>核心红利！</strong>平台算法调高该 Unit 整体出价"],
+    ["大盘总收益（日均）",sp.rev,"rev","up","<strong>最终大决战指标！</strong>证明降本且增效"],
+  ].map(([nm,o,k,gd,note])=>`<tr><td class="metric-name">${nm}</td><td class="calc muted">${cell(o.pre,k)}</td><td class="calc muted">${cell(o.post,k)}</td><td class="calc">${dcell(o.post,o.pre,gd)}</td><td style="text-align:left;font-size:12.5px">${note}</td></tr>`).join("");
+  return `<div style="font-size:12.5px;color:#4a5568;margin:4px 0 8px">${win}</div>
+   <div class="table-wrap"><table><thead><tr><th style="text-align:left">评估指标（Unit 大盘总计 = ΣABCD）</th><th>数据期前段均值</th><th>数据期后段均值</th><th>实际变化</th><th>溢出价值判定</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function verdictHTML(e,der,t,rm,sp){
   const rd=relDelta(sp.rev.post,sp.rev.pre), qd=relDelta(sp.req.post,sp.req.pre);
   const cVpm=rm.cDer.vpm;
-
-  // KPI：各有数据组 VPM（标实验组/对照组），+ 对照组合计
   let kpi="";
   rm.present.forEach(gk=>{
     const v=der[gk].vpm, isT=rm.treat.includes(gk);
-    const w=grpWeight(rm.e,gk); const wt=w!=null?` ${w}%`:"";
+    const w=grpWeight(e,gk); const wt=w!=null?` ${w}%`:"";
     let sub="";
     if(isT && rm.ctrl.length){ const di=deltaInfo(v,cVpm,"up"); if(di.txt) sub=`<div class="k-sub"><span class="${di.cls}">vs对照 ${di.txt}</span></div>`; }
     kpi+=`<div class="kpi"><div class="k-label">${gk}组 ${isT?"实验组(B·RPR)":"对照组"}${wt} · VPM</div><div class="k-val">${isFinite(v)?fmt(v,2):"—"}</div>${sub}</div>`;
   });
   kpi+=`<div class="kpi" style="border-color:#3182ce"><div class="k-label">对照组合计 (${rm.ctrl.join("+")||"—"}) · VPM 基准</div><div class="k-val">${isFinite(cVpm)?fmt(cVpm,2):"—"}</div><div class="k-sub">大盘收益Δ ${isFinite(rd)?(rd>=0?"+":"")+(rd*100).toFixed(1)+"%":"—"}｜大盘请求Δ ${isFinite(qd)?(qd>=0?"+":"")+(qd*100).toFixed(1)+"%":"—"}</div></div>`;
-  document.getElementById("kpiRow").innerHTML=kpi;
-
-  const box=document.getElementById("verdictBox"), reco=document.getElementById("recoBox");
+  let box="", reco="";
   if(!rm.treat.length){
-    box.innerHTML=`<div class="verdict-card none"><span class="verdict-tag none">无实验组</span><h3>B 组（RPR 实验组）暂无数据</h3><p>B 组已固定为 RPR 实验组；请录入/导入 B 组数据，A/C/D 将自动作为对照组。</p></div>`;
-    reco.innerHTML=""; return;
+    box=`<div class="verdict-card none"><span class="verdict-tag none">无实验组</span><h3>B 组（RPR 实验组）暂无数据</h3><p>B 组已固定为 RPR 实验组；A/C/D 自动作对照。</p></div>`;
+  } else if(!rm.ctrl.length || !isFinite(cVpm) || cVpm<=0){
+    box=`<div class="verdict-card none"><span class="verdict-tag none">无对照组</span><h3>缺少有效对照组数据</h3><p>需 A/C/D 中至少一个对照组录入数据。</p></div>`;
+  } else {
+    const hasSpill=sp.n>=2; let best=null;
+    rm.treat.forEach(gk=>{
+      const vd=relDelta(der[gk].vpm, cVpm);
+      const lbl=(e.info&&e.info["i_lbl"+gk])||GROUP_DESC[gk];
+      if(!hasSpill){
+        box+=`<div class="verdict-card none"><span class="verdict-tag none">${gk} 实验组</span><h3>${gk} · ${esc(lbl)}：VPM vs 对照合计 ${(vd*100).toFixed(1)}%</h3><ul><li>内部效率已可比较；大盘溢出需 ≥2 天带日期数据后给完整 A/B/C 判定。</li></ul></div>`;
+      } else {
+        const r=classify(vd,rd,qd);
+        box+=`<div class="verdict-card ${r.cls}"><span class="verdict-tag ${r.tag}">${gk} 实验组 · ${r.tag==="none"?"研判":"情况 "+r.tag}</span><h3>${gk} · ${esc(lbl)}：${r.title}（VPM vs 对照 ${(vd*100).toFixed(1)}%）</h3><ul>${r.lis.map(x=>`<li>${x}</li>`).join("")}</ul></div>`;
+      }
+      if(vd>SIG && (!best||vd>best.vd)) best={gk,vd,lbl};
+    });
+    reco = best
+      ? `<div class="reco">🏁 <strong>推荐实验组：${best.gk} 组（${esc(best.lbl)}）</strong> —— VPM 显著跑赢对照组合计（+${(best.vd*100).toFixed(1)}%），建议优先以该组参数推进灰度（仍需结合大盘溢出与显著性检验）。</div>`
+      : `<div class="reco">⚠️ B 实验组 VPM 未显著跑赢对照组合计（阈值 ${(SIG*100)}%）。当前策略未跑出效率优势，建议检查词表/调整 Base_Rate 或继续观察。</div>`;
   }
-  if(!rm.ctrl.length || !isFinite(cVpm) || cVpm<=0){
-    box.innerHTML=`<div class="verdict-card none"><span class="verdict-tag none">无对照组</span><h3>缺少有效对照组数据</h3><p>需 A/C/D 中至少一个对照组录入数据，才能与 B 实验组对比。</p></div>`;
-    reco.innerHTML=""; return;
-  }
-  const hasSpill=sp.n>=2;
-  let cards="", best=null;
-  rm.treat.forEach(gk=>{
-    const vd=relDelta(der[gk].vpm, cVpm);
-    const lbl=(rm.e.info&&rm.e.info["i_lbl"+gk])||GROUP_DESC[gk];
-    if(!hasSpill){
-      cards+=`<div class="verdict-card none"><span class="verdict-tag none">${gk} 实验组</span><h3>${gk} · ${lbl}：VPM vs 对照合计 ${(vd*100).toFixed(1)}%</h3><ul><li>内部效率已可比较；大盘溢出需 ≥2 天带日期数据后自动给出完整 A/B/C 判定。</li></ul></div>`;
-    } else {
-      const r=classify(vd,rd,qd);
-      cards+=`<div class="verdict-card ${r.cls}"><span class="verdict-tag ${r.tag}">${gk} 实验组 · ${r.tag==="none"?"研判":"情况 "+r.tag}</span><h3>${gk} · ${lbl}：${r.title}（VPM vs 对照 ${(vd*100).toFixed(1)}%）</h3><ul>${r.lis.map(x=>`<li>${x}</li>`).join("")}</ul></div>`;
-    }
-    if(vd>SIG && (!best||vd>best.vd)) best={gk,vd,lbl};
-  });
-  box.innerHTML=cards;
-  if(best) reco.innerHTML=`<div class="reco">🏁 <strong>推荐实验组：${best.gk} 组（${best.lbl}）</strong> —— VPM 显著跑赢对照组合计（+${(best.vd*100).toFixed(1)}%），建议优先以该组参数推进灰度（仍需结合大盘溢出与显著性检验）。</div>`;
-  else reco.innerHTML=`<div class="reco">⚠️ 暂无任一实验组 VPM 显著跑赢对照组合计（阈值 ${(SIG*100)}%）。当前策略未跑出效率优势，建议检查词表/调整 Base_Rate 或继续观察。</div>`;
+  return `<div class="kpi-row">${kpi}</div>${box}${reco}`;
+}
+function overviewCardHTML(e){
+  const t=totalsOf(e); const der={}; GROUPS.forEach(g=>der[g]=derived(t[g]));
+  const rm=roleModelOf(e,t); const sp=computeSpillOf(e);
+  const split = (e.info&&e.info.i_split) ? e.info.i_split
+    : GROUPS.filter(g=>hasData(t[g])).map(g=>{const w=grpWeight(e,g);return g+(w!=null?`:${w}%`:"");}).join(" | ");
+  return `<section style="border:1px solid #e2e8f0;border-radius:10px;padding:16px 18px;margin-bottom:18px;background:#fff">
+    <div style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;border-bottom:2px solid #f0f2f7;padding-bottom:8px;margin-bottom:6px">
+      <span style="font-size:16px;font-weight:700;color:#1a365d">${esc(expLabel(e))}</span>
+      <span style="font-size:12.5px;color:#718096">${e.info&&e.info.i_placement?("广告位 "+esc(e.info.i_placement)+" · "):""}流量分组 ${esc(split)||"—"}</span>
+    </div>
+    <h3>周期汇总评估表（自动计算）</h3>${summaryHTML(e,t,der,rm)}
+    <h3>大盘溢出效应对比（A+B+C+D 日合计 · 自动）</h3>${spillHTML(e,sp)}
+    <h3>结论判定（B 实验组 vs 对照组合计）</h3>${verdictHTML(e,der,t,rm,sp)}
+  </section>`;
+}
+function infoFormHTML(e){
+  const I=(k,label,ph,type)=>{
+    if(type==="textarea") return `<div class="field" style="grid-column:1/-1"><label>${label}</label><textarea data-exp="${e.id}" data-k="${k}" placeholder="${ph||""}">${esc(e.info&&e.info[k]||"")}</textarea></div>`;
+    return `<div class="field"><label>${label}</label><input ${type?`type="${type}"`:""} data-exp="${e.id}" data-k="${k}" value="${esc(e.info&&e.info[k]!=null?e.info[k]:"")}" placeholder="${ph||""}"></div>`;
+  };
+  return `<div class="grid2">
+   ${I("i_name","实验名称","实验名")}
+   ${I("i_placement","广告位 Placement_ID","")}
+   ${I("i_unit","底层共用广告源 Unit ID","")}
+   ${I("i_split","流量分流比例（导入自动填）","")}
+   ${I("i_start","观察周期 · 开始","","date")}
+   ${I("i_end","观察周期 · 结束","","date")}
+   ${I("i_baserate","策略参数 Base_Rate","如 20%")}
+   ${I("i_T","策略参数 T","如 大盘中位数")}
+   ${I("i_lblA","A 组说明（对照）","")}
+   ${I("i_lblB","B 组说明（RPR 实验组）","")}
+   ${I("i_lblC","C 组说明（对照）","")}
+   ${I("i_lblD","D 组说明（对照）","")}
+   ${I("i_note","备注 / 词表版本 / 风险点","","textarea")}
+  </div>`;
+}
+function dailyFootHTML(e){
+  const t=totalsOf(e);
+  let foot=`<td class="metric-name">周期合计</td>`;
+  GROUPS.forEach(g=>{ foot+=`<td class="calc grp-${g}">${fmt(t[g].r)}</td><td class="calc grp-${g}">${fmt(t[g].f)}</td><td class="calc grp-${g}">${fmt(t[g].i)}</td><td class="calc grp-${g}">${fmt(t[g].v,2)}</td>`; });
+  foot+=`<td class="no-print"></td>`;
+  return foot;
+}
+function dailyTableHTML(e){
+  let h1=`<th rowspan="2">日期</th>`;
+  GROUPS.forEach(g=>{ const lbl=(e.info&&e.info["i_lbl"+g])||GROUP_DESC[g]; h1+=`<th colspan="4" class="grp-${g}">${g} 组 · ${esc(lbl)}</th>`; });
+  h1+=`<th rowspan="2" class="no-print">操作</th>`;
+  let h2=""; GROUPS.forEach(g=> h2+=`<th class="grp-${g}">请求</th><th class="grp-${g}">填充</th><th class="grp-${g}">展示</th><th class="grp-${g}">收益</th>`);
+  const body=(e.days||[]).map((d,idx)=>{
+    let cells=`<td><input type="date" data-exp="${e.id}" data-idx="${idx}" data-f="date" value="${esc(d.date||"")}" style="text-align:center;min-width:130px"></td>`;
+    GROUPS.forEach(g=>["r","f","i","v"].forEach(fk=>{
+      const step=fk==="v"?' step="0.01"':"";
+      cells+=`<td class="grp-${g}"><input type="number"${step} data-exp="${e.id}" data-idx="${idx}" data-g="${g}" data-f="${fk}" value="${esc((d[g]&&d[g][fk]!=null)?d[g][fk]:"")}"></td>`;
+    }));
+    cells+=`<td class="no-print"><button class="btn btn-danger btn-sm" onclick="delDayE('${e.id}',${idx})">删</button></td>`;
+    return `<tr>${cells}</tr>`;
+  }).join("");
+  return `<div class="row-actions">
+     <button class="btn btn-primary btn-sm" onclick="addDayE('${e.id}')">＋ 新增一天</button>
+     <button class="btn btn-ghost btn-sm" onclick="genDaysE('${e.id}')">按周期批量生成日期行</button>
+   </div>
+   <div class="table-wrap"><table><thead><tr>${h1}</tr><tr>${h2}</tr></thead>
+     <tbody>${body||`<tr><td colspan="18" style="color:#a0aec0;padding:14px">暂无数据，点"新增一天"或用顶部"批量导入CSV"</td></tr>`}</tbody>
+     <tfoot><tr id="dfoot_${e.id}" style="font-weight:700;background:#eef4fb">${dailyFootHTML(e)}</tr></tfoot>
+   </table></div>`;
+}
+function detailCardHTML(e){
+  return `<section style="border:1px solid #e2e8f0;border-left:4px solid #2b6cb0;border-radius:10px;padding:16px 18px;margin-bottom:18px;background:#fff">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #f0f2f7;padding-bottom:8px;margin-bottom:12px">
+      <span style="font-size:16px;font-weight:700;color:#1a365d">${esc(expLabel(e))}</span>
+      <button class="btn btn-danger btn-sm" onclick="delExpE('${e.id}')">删除该实验</button>
+    </div>
+    <h3>实验信息登记</h3>${infoFormHTML(e)}
+    <h3>逐日核心数据明细表（SDK 侧）</h3>${dailyTableHTML(e)}
+  </section>`;
 }
 
-/* ---------- recalc / persist ---------- */
-function recalc(){ const agg=renderSummary(); const sp=renderSpill(); renderVerdict(agg, sp); }
-function collectActive(){
-  const e=activeExp(); if(!e) return;
-  e.info=e.info||{}; INFO_FIELDS.forEach(id=> e.info[id]=document.getElementById(id).value);
+/* ---------- renderers ---------- */
+function renderOverview(){
+  const c=document.getElementById("overviewList"); if(c) c.innerHTML=state.experiments.map(overviewCardHTML).join("");
+  const ec=document.getElementById("expCount"); if(ec) ec.textContent=`共 ${state.experiments.length} 个实验`;
 }
-function save(showTip=true){
-  collectActive();
+function renderDetail(){
+  const c=document.getElementById("detailList"); if(c) c.innerHTML=state.experiments.map(detailCardHTML).join("");
+}
+function renderAll(){ renderOverview(); renderDetail(); }
+function recalc(){ renderOverview(); }
+function collectActive(){} // 数据已通过事件委托实时写入 state，无需收集
+
+/* ---------- state ops ---------- */
+function persist(showTip){
   localStorage.setItem(LS_KEY, JSON.stringify(state));
   if(showTip){
     const el=document.getElementById("saveState");
-    el.textContent="✓ 已保存 "+new Date().toLocaleTimeString();
-    clearTimeout(window.__st); window.__st=setTimeout(()=>el.textContent="数据自动保存在本浏览器",2000);
+    if(el){ el.textContent="✓ 已保存 "+new Date().toLocaleTimeString();
+      clearTimeout(window.__st); window.__st=setTimeout(()=>el.textContent="数据自动保存在本浏览器",2000); }
   }
-  renderExpSelect();
 }
+function save(showTip=true){ persist(showTip); }
+function gotoDetailTab(){
+  const b=document.querySelector('.tab-btn[data-tab="detail"]'); if(b) b.click();
+}
+function newExp(){
+  const e=blankExp(uniqueName("新广告位实验 "+new Date().toISOString().slice(5,10).replace("-","")+"-"+(Math.floor(Math.random()*900)+100)));
+  state.experiments.unshift(e);
+  persist(false); renderAll(); gotoDetailTab();
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function delExpE(id){
+  const e=findExp(id); if(!e) return;
+  if(!confirm(`确认删除实验「${expLabel(e)}」？该实验全部数据将被清除，不可恢复。`)) return;
+  state.experiments=state.experiments.filter(x=>x.id!==id);
+  if(!state.experiments.length) state.experiments.push(blankExp("新广告位实验 1"));
+  persist(false); renderAll();
+}
+function addDayE(id){ const e=findExp(id); if(!e) return; e.days.push(blankDay("")); persist(false); renderDetail(); renderOverview(); }
+function delDayE(id,idx){ const e=findExp(id); if(!e) return; e.days.splice(idx,1); persist(false); renderDetail(); renderOverview(); }
+function genDaysE(id){
+  const e=findExp(id); if(!e) return;
+  const s=(e.info&&e.info.i_start)||"", en=(e.info&&e.info.i_end)||"";
+  if(!s||!en){ alert("请先在该实验的【实验信息登记】填写观察周期起止日期"); return; }
+  const sd=new Date(s), ed=new Date(en);
+  if(sd>ed){ alert("开始日期不能晚于结束日期"); return; }
+  if((e.days||[]).length && !confirm("将按周期重新生成日期行，该实验已录入数据会被清空，确认？")) return;
+  e.days=[];
+  for(let dt=new Date(sd); dt<=ed; dt.setDate(dt.getDate()+1)) e.days.push(blankDay(dt.toISOString().slice(0,10)));
+  persist(false); renderDetail(); renderOverview();
+}
+function updateDetailFoot(e){
+  const tf=document.getElementById("dfoot_"+e.id); if(tf) tf.innerHTML=dailyFootHTML(e);
+}
+
+/* ---------- migrate / normalize / load ---------- */
 function migrateV1(raw){
   try{
     const old=JSON.parse(raw);
     const e=blankExp((old.info&&old.info.i_name)||"导入的旧实验");
     e.info=Object.assign({}, old.info||{});
-    e.spill=Object.assign({}, old.spill||{});
-    (old.days||[]).forEach(d=>{
-      const nd=blankDay(d.date||"");
+    (old.days||[]).forEach(d=>{ const nd=blankDay(d.date||"");
       nd.A={r:d.ra||"",f:d.fa||"",i:d.ia||"",v:d.va||""};
       nd.B={r:d.rb||"",f:d.fb||"",i:d.ib||"",v:d.vb||""};
-      e.days.push(nd);
-    });
+      e.days.push(nd); });
     return e;
   }catch(err){ return null; }
 }
 function normalize(st){
-  if(!st||!Array.isArray(st.experiments)||!st.experiments.length){
-    state={experiments:[blankExp("新广告位实验 1")]};
-  } else state=st;
-  state.experiments.forEach(e=>{ e.id=e.id||uid(); e.info=e.info||{}; e.spill=e.spill||{};
+  if(!st||!Array.isArray(st.experiments)||!st.experiments.length){ state={experiments:[blankExp("新广告位实验 1")]}; }
+  else state=st;
+  state.experiments.forEach(e=>{ e.id=e.id||uid(); e.info=e.info||{};
     e.days=(e.days||[]).map(d=>{ const nd=blankDay(d.date||""); GROUPS.forEach(g=>{ if(d[g]) nd[g]={r:d[g].r||"",f:d[g].f||"",i:d[g].i||"",v:d[g].v||""}; }); return nd; });
     const w=e.info.__w; if(w&&Object.keys(w).length) e.info.i_split=GROUPS.filter(g=>w[g]!=null).map(g=>`${g}:${w[g]}%`).join(" | "); });
-  if(!state.activeId || !state.experiments.find(e=>e.id===state.activeId)) state.activeId=state.experiments[0].id;
 }
 function load(){
   let raw=localStorage.getItem(LS_KEY);
@@ -670,11 +548,21 @@ function load(){
     if(oldRaw){ const e=migrateV1(oldRaw); state={experiments:[e||blankExp("新广告位实验 1")]}; normalize(state); }
     else normalize(null);
   }
-  renderExpSelect(); loadExpToForm();
+  renderAll();
 }
-document.addEventListener("input", e=>{
-  if(INFO_FIELDS.includes(e.target.id)){ save(); if(["i_name","i_placement","i_lblA","i_lblB","i_lblC","i_lblD"].includes(e.target.id)) renderExpSelect(); recalc(); }
-  else if(SPILL_FIELDS.includes(e.target.id)){ save(); recalc(); }
+let __dbt=null;
+document.addEventListener("input", ev=>{
+  const tgt=ev.target; const id=tgt&&tgt.dataset&&tgt.dataset.exp;
+  if(!id) return;
+  const e=findExp(id); if(!e) return;
+  if(tgt.dataset.k!=null){ e.info=e.info||{}; e.info[tgt.dataset.k]=tgt.value; }
+  else if(tgt.dataset.idx!=null){
+    const i=+tgt.dataset.idx; if(!e.days[i]) return;
+    if(tgt.dataset.f==="date") e.days[i].date=tgt.value;
+    else e.days[i][tgt.dataset.g][tgt.dataset.f]=tgt.value;
+  }
+  clearTimeout(__dbt);
+  __dbt=setTimeout(()=>{ persist(false); renderOverview(); updateDetailFoot(e); }, 250);
 });
 
 /* ---------- import / export ---------- */
@@ -696,9 +584,9 @@ function importJSON(inp){
         if(state.experiments.length && !confirm("导入将替换当前全部实验，确认？（建议先导出备份）")) { inp.value=""; return; }
         normalize(data);
       } else if(data && data.info){
-        const e=migrateV1(r.result); if(e){ state.experiments.push(e); state.activeId=e.id; }
+        const e=migrateV1(r.result); if(e){ state.experiments.unshift(e); }
       } else { alert("无法识别的文件格式"); inp.value=""; return; }
-      save(false); renderExpSelect(); loadExpToForm(); alert("导入成功");
+      persist(false); renderAll(); alert("导入成功");
     }catch(e){ alert("文件解析失败"); }
     inp.value="";
   };
@@ -855,10 +743,9 @@ function importCSV(inp){
       const hdr=rows[0].join(",");
       const isRaw=/分组名称/.test(hdr) && /流量请求/.test(hdr);
       const added = isRaw ? importRprRaw(rows) : importSimple(rows);
-      if(!state.activeId||!state.experiments.find(e=>e.id===state.activeId)) state.activeId=state.experiments[0].id;
-      save(false); renderExpSelect(); loadExpToForm();
+      persist(false); renderAll();
       const summary = analyzeImport();
-      alert(`批量导入完成（${isRaw?"原始导出模板":"简易模板"}）：写入 ${added} 条组别日数据，当前共 ${state.experiments.length} 个实验。\n\n—— 自动分析结论 ——\n\n${summary}\n\n（详见 ②核心数据回收 / ④结论判定 标签页；大盘溢出 A/B/C 完整判定需在 ③ 填入实验前/后大盘数据）`);
+      alert(`批量导入完成（${isRaw?"原始导出模板":"简易模板"}）：写入 ${added} 条组别日数据，当前共 ${state.experiments.length} 个实验。\n\n—— 自动分析结论 ——\n\n${summary}\n\n（已在「① 结果总览」首页按实验逐个展示周期汇总/大盘溢出/结论判定）`);
     }catch(e){ alert("CSV 解析失败："+e.message); }
     inp.value="";
   };
@@ -881,7 +768,7 @@ function exportCSV(){
 function clearAll(){
   if(!confirm("将清空全部广告位实验数据（含本地缓存），不可恢复，确认？")) return;
   localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_KEY_OLD);
-  normalize(null); save(false); renderExpSelect(); loadExpToForm();
+  normalize(null); persist(false); renderAll();
 }
 
 function renderVersion(){
