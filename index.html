@@ -234,7 +234,7 @@
         <tbody id="summaryBody"></tbody>
       </table>
     </div>
-    <div class="hint">分组名称含 <strong>rpr</strong> 自动判为<strong>实验组</strong>，其余有数据的组为<strong>对照组</strong>；"对照组合计"列为对照组求和后的基准。实验组单元格下方小字为相对"对照组合计"的变化（绿=向好 / 红=向坏 / 灰=未达 5% 显著阈值）。流量占比取自原始数据"权重"列。</div>
+    <div class="hint"><strong>B 组固定为 RPR 实验组</strong>，A/C/D 一律为<strong>对照组</strong>；"对照组合计"列为对照组（A+C+D 中有数据者）求和后的基准。实验组(B)单元格下方小字为相对"对照组合计"的变化（绿=向好 / 红=向坏 / 灰=未达 5% 显著阈值）。流量占比取自原始数据"权重"列。</div>
   </section>
 
   <!-- ③ 大盘溢出 -->
@@ -292,7 +292,7 @@
     <div id="verdictBox"></div>
     <div id="recoBox"></div>
 
-    <h3>四象限决策参考（每个实验组(含rpr) vs 对照组合计；大盘溢出为 ΣABCD 自动计算）</h3>
+    <h3>四象限决策参考（B 实验组 vs 对照组(A/C/D)合计；大盘溢出为 ΣABCD 自动计算）</h3>
     <div class="table-wrap">
       <table>
         <thead><tr><th>情况</th><th>数据表现</th><th>业务结论与下阶段决策</th></tr></thead>
@@ -319,9 +319,10 @@
 </div>
 
 <script>
-const APP_VERSION = "v1.5.0";
+const APP_VERSION = "v1.5.1";
 const BUILD_DATE = "2026-05-19";
 const CHANGELOG = [
+  ["v1.5.1","2026-05-19","实验/对照判定写死：B 组固定为 RPR 实验组，A/C/D 一律对照组（不再依赖分组名称含 rpr 关键词）"],
   ["v1.5.0","2026-05-19","②④分析全面改为 rpr=实验组/其余=对照组（含流量占比、对照组合计基准）；③大盘溢出改为按 A+B+C+D 日合计自动计算（数据期前7天均值 vs 后7天均值），随数据实时同步；新建/导入实验名称去重并置顶显示"],
   ["v1.4.0","2026-05-19","新增可见版本号/构建日期与更新日志，便于刷新后确认部署是否生效（含缓存提示）"],
   ["v1.3.0","2026-05-19","解析“权重”列得到各组流量占比；分组判定改为：分组名称含 rpr=实验组，其余全为对照组，支持多实验组对比"],
@@ -462,9 +463,9 @@ function derived(o){ return {
   ecpm: o.i>0? o.v/o.i*1000 : NaN,
 }; }
 function hasData(o){ return o.r>0||o.f>0||o.i>0||o.v>0; }
-function isTreat(e,g){ return /rpr/i.test((e&&e.info&&e.info["i_lbl"+g])||""); }
+function isTreat(e,g){ return g==="B"; } // 写死：B 组为 RPR 实验组，A/C/D 均为对照组
 function grpWeight(e,g){ const w=e&&e.info&&e.info.__w; return (w&&w[g]!=null)? w[g] : null; }
-// 角色划分：含 rpr 关键词=实验组，其余有数据的组=对照组；对照组按合计(sum)作基准
+// 角色划分：B 组写死为 RPR 实验组，A/C/D 为对照组；对照组按合计(sum)作基准
 function roleModel(t){
   const e=activeExp()||{info:{}};
   const present=GROUPS.filter(g=>hasData(t[g]));
@@ -493,7 +494,7 @@ function renderSummary(){
     const lbl=(e.info&&e.info["i_lbl"+g])||GROUP_DESC[g];
     const w=grpWeight(e,g); const wt=w!=null?` · 流量${w}%`:"";
     let role="<span class='dir flat' style='opacity:.4'>无数据</span>";
-    if(hasData(t[g])) role= rm.treat.includes(g)? "<span class='dir up'>实验组(rpr)</span>" : "<span class='dir down'>对照组</span>";
+    if(hasData(t[g])) role= rm.treat.includes(g)? "<span class='dir up'>实验组(B·RPR)</span>" : "<span class='dir down'>对照组</span>";
     head+=`<th class="grp-${g}">${g} · ${lbl}${wt}<br>${role}</th>`;
   });
   head+=`<th class="grp-A">对照组合计<br><span class='dir flat'>基准(${rm.ctrl.join("+")||"—"})</span></th><th>预期方向</th><th>业务结论 / 佐证</th>`;
@@ -589,18 +590,18 @@ function renderVerdict(agg, sp){
     const w=grpWeight(rm.e,gk); const wt=w!=null?` ${w}%`:"";
     let sub="";
     if(isT && rm.ctrl.length){ const di=deltaInfo(v,cVpm,"up"); if(di.txt) sub=`<div class="k-sub"><span class="${di.cls}">vs对照 ${di.txt}</span></div>`; }
-    kpi+=`<div class="kpi"><div class="k-label">${gk}组 ${isT?"实验组(rpr)":"对照组"}${wt} · VPM</div><div class="k-val">${isFinite(v)?fmt(v,2):"—"}</div>${sub}</div>`;
+    kpi+=`<div class="kpi"><div class="k-label">${gk}组 ${isT?"实验组(B·RPR)":"对照组"}${wt} · VPM</div><div class="k-val">${isFinite(v)?fmt(v,2):"—"}</div>${sub}</div>`;
   });
   kpi+=`<div class="kpi" style="border-color:#3182ce"><div class="k-label">对照组合计 (${rm.ctrl.join("+")||"—"}) · VPM 基准</div><div class="k-val">${isFinite(cVpm)?fmt(cVpm,2):"—"}</div><div class="k-sub">大盘收益Δ ${isFinite(rd)?(rd>=0?"+":"")+(rd*100).toFixed(1)+"%":"—"}｜大盘请求Δ ${isFinite(qd)?(qd>=0?"+":"")+(qd*100).toFixed(1)+"%":"—"}</div></div>`;
   document.getElementById("kpiRow").innerHTML=kpi;
 
   const box=document.getElementById("verdictBox"), reco=document.getElementById("recoBox");
   if(!rm.treat.length){
-    box.innerHTML=`<div class="verdict-card none"><span class="verdict-tag none">无实验组</span><h3>未发现含「rpr」关键词的实验组</h3><p>请确认分组名称（如“B组-rpr算法”）含 rpr 关键词；其余有数据的组将自动作为对照组。</p></div>`;
+    box.innerHTML=`<div class="verdict-card none"><span class="verdict-tag none">无实验组</span><h3>B 组（RPR 实验组）暂无数据</h3><p>B 组已固定为 RPR 实验组；请录入/导入 B 组数据，A/C/D 将自动作为对照组。</p></div>`;
     reco.innerHTML=""; return;
   }
   if(!rm.ctrl.length || !isFinite(cVpm) || cVpm<=0){
-    box.innerHTML=`<div class="verdict-card none"><span class="verdict-tag none">无对照组</span><h3>缺少有效对照组数据</h3><p>需至少一个不含 rpr 的对照组录入数据，才能与实验组对比。</p></div>`;
+    box.innerHTML=`<div class="verdict-card none"><span class="verdict-tag none">无对照组</span><h3>缺少有效对照组数据</h3><p>需 A/C/D 中至少一个对照组录入数据，才能与 B 实验组对比。</p></div>`;
     reco.innerHTML=""; return;
   }
   const hasSpill=sp.n>=2;
@@ -743,13 +744,13 @@ function analyzeImport(){
   let lines=[];
   state.experiments.forEach(e=>{
     const s=expStats(e), info=e.info||{}, w=info.__w||{};
-    // 实验组 = 分组名称含 rpr（不区分大小写）；其余有数据的组均为对照组
+    // 实验组 = B 组（写死）；A/C/D 均为对照组
     const present=GROUPS.filter(g=>s[g].has);
     const wTxt=g=> w[g]!=null? `,流量${w[g]}%` : "";
-    const treatGs=present.filter(g=> /rpr/i.test(info["i_lbl"+g]||""));
-    const ctrls=present.filter(g=> !/rpr/i.test(info["i_lbl"+g]||""));
+    const treatGs=present.filter(g=> g==="B");
+    const ctrls=present.filter(g=> g!=="B");
     const splitTxt=present.map(g=> `${g}「${info["i_lbl"+g]||""}」${w[g]!=null?w[g]+"%":"—"}`).join("｜");
-    if(!treatGs.length){ lines.push(`• ${expLabel(e)}\n   流量分组：${splitTxt}\n   未发现含「rpr」关键词的实验组，无法做实验/对照对比`); return; }
+    if(!treatGs.length){ lines.push(`• ${expLabel(e)}\n   流量分组：${splitTxt}\n   B 组（RPR 实验组）无数据，无法做实验/对照对比`); return; }
     if(!ctrls.length){ lines.push(`• ${expLabel(e)}\n   流量分组：${splitTxt}\n   仅有实验组、无对照组，无法对比`); return; }
     const cg={r:0,f:0,i:0,v:0};
     (e.days||[]).forEach(d=> ctrls.forEach(g=>{ const c=d[g]||{}; cg.r+=num(c.r); cg.f+=num(c.f); cg.i+=num(c.i); cg.v+=num(c.v); }));
