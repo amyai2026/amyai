@@ -162,7 +162,6 @@
     <button class="btn btn-ghost" onclick="document.getElementById('importCsv').click()">⬆ 批量导入CSV</button>
     <input type="file" id="importCsv" accept=".csv" style="display:none" onchange="importCSV(this)">
     <button class="btn btn-ghost btn-sm" onclick="downloadCsvTemplate()">CSV模板</button>
-    <button class="btn btn-ghost" onclick="exportCSV()">⬇ 导出明细CSV</button>
     <button class="btn btn-primary" onclick="window.print()">🖨 打印</button>
     <span style="display:inline-flex;align-items:center;gap:4px;padding-left:8px;border-left:1px solid #e2e8f0;margin-left:4px">
       <span style="font-size:12px;color:#4a5568">导出范围</span>
@@ -172,6 +171,7 @@
         <option value="detail">③ 数据录入与详情</option>
         <option value="all">全部页面</option>
       </select>
+      <button class="btn btn-ghost btn-sm" onclick="exportCsv()">📊 CSV</button>
       <button class="btn btn-ghost btn-sm" onclick="exportPage('jpg')">📸 JPG</button>
       <button class="btn btn-ghost btn-sm" onclick="exportPage('png')">🖼 PNG</button>
       <button class="btn btn-primary btn-sm" onclick="exportPage('pdf')">📄 PDF</button>
@@ -230,9 +230,10 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
-const APP_VERSION = "v1.11.7";
+const APP_VERSION = "v1.12.0";
 const BUILD_DATE = "2026-05-20";
 const CHANGELOG = [
+  ["v1.12.0","2026-05-20","新增『📊 CSV 导出』按钮，沿用导出范围下拉，4 种范围各自定制输出：① 结果总览=每实验一行（含全部元数据+三大盘Δ+研判）；② 全部实验同屏对比=每实验三段（周期汇总/大盘溢出/研判）；③ 数据录入与详情=原始逐日明细（含DAU/DEU/询价等全字段）；全部=三段拼接"],
   ["v1.11.7","2026-05-20","场景C 简化为单条件『收益/DAU 显著下降(<-3%)』；展示/DAU 断崖与 eCPM 下降仅作为详情描述附注，不再作为必要条件。C 优先级高于 D，因此 D 只在『收益/DAU 下降未显著(-0.5%~-3%) + eCPM 显著下降』时命中"],
   ["v1.11.6","2026-05-20","场景D 触发门槛由『eCPM 大跌(-10%)』放宽为『eCPM 显著下降(-3%)』；首页阈值说明统一为『显著 ±3%』"],
   ["v1.11.5","2026-05-20","场景D 简化为『收益/DAU 下降 + eCPM 大跌』，不再要求 展示/DAU 上涨（详细描述会自动标注实际 展示/DAU 方向）"],
@@ -1128,20 +1129,146 @@ function importCSV(inp){
   };
   r.readAsText(f);
 }
-function exportCSV(){
-  collectActive();
-  let rows=[["广告位名称","日期","组别","请求","填充","展示","预估收益"]];
+/* ---------- CSV export (scope-aware) ---------- */
+function csvCell(v){
+  if(v==null) return "";
+  const s=String(v);
+  return /[",\n\r]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+function csvRow(arr){ return arr.map(csvCell).join(","); }
+function pctFmt(x,d){ d=d==null?2:d; return isFinite(x)?((x>=0?"+":"")+(x*100).toFixed(d)+"%"):"—"; }
+function numFmt(x,d){ d=d==null?2:d; return isFinite(x)? (d===0?Math.round(x).toString():x.toFixed(d)) : "—"; }
+
+// ① 结果总览 CSV：每实验一行（含全部元数据 + 三大盘 Δ + 研判 + 建议）
+function buildResultsCsv(){
+  const head=["广告位名称","广告位UUID","广告样式","系统平台","应用名称","应用UUID","开发者ID","开发者名称","实验ID",
+    "收益/DAU 前段","收益/DAU 后段","收益/DAU Δ%",
+    "预估eCPM 前段","预估eCPM 后段","预估eCPM Δ%",
+    "展示/DAU 前段","展示/DAU 后段","展示/DAU Δ%",
+    "研判场景","研判标题","建议"];
+  const rows=[csvRow(head)];
   state.experiments.forEach(e=>{
-    const nm=expLabel(e);
+    const inf=e.info||{};
+    const sp=computeSpillOf(e);
+    const r=expVerdict(e);
+    rows.push(csvRow([
+      inf.__plaName||"", inf.__plaUuid||"", inf.__adFormat||"", inf.__os||"",
+      inf.__appName||"", inf.__appUuid||"", inf.__devId||"", inf.__devName||"", inf.__src||"",
+      numFmt(sp.rpd.pre,6), numFmt(sp.rpd.post,6), pctFmt(r.rdpd,2),
+      numFmt(sp.ecpm.pre,4), numFmt(sp.ecpm.post,4), pctFmt(r.rEcpm,2),
+      numFmt(sp.ipd.pre,4), numFmt(sp.ipd.post,4), pctFmt(r.rIpd,2),
+      r.tag==="none"?"—":"场景"+r.tag, r.title, r.suggestion
+    ]));
+  });
+  return "[① 结果总览 · 全部实验研判汇总]\n"+rows.join("\n");
+}
+
+// ② 全部实验同屏对比 CSV：每实验三段
+function buildCompareCsv(){
+  const out=["[② 全部实验同屏对比 · 每实验完整指标]"];
+  state.experiments.forEach((e,idx)=>{
+    if(idx>0) out.push("");
+    const t=totalsOf(e); const der={}; GROUPS.forEach(g=>der[g]=derived(t[g]));
+    const rm=roleModelOf(e,t); const sp=computeSpillOf(e); const v=expVerdict(e);
+    const inf=e.info||{};
+    // 标题
+    out.push("=== "+(inf.__plaName||expLabel(e))+" ===");
+    const meta=[];
+    if(inf.__plaUuid) meta.push("广告位UUID="+inf.__plaUuid);
+    if(inf.__adFormat) meta.push("广告样式="+inf.__adFormat);
+    if(inf.__os) meta.push("系统平台="+inf.__os);
+    if(inf.__appName) meta.push("应用="+inf.__appName);
+    if(inf.__appUuid) meta.push("应用UUID="+inf.__appUuid);
+    if(inf.__devId) meta.push("开发者ID="+inf.__devId);
+    if(inf.__devName) meta.push("开发者="+inf.__devName);
+    if(inf.__src) meta.push("实验ID="+inf.__src);
+    if(inf.i_split) meta.push("流量分组 "+inf.i_split);
+    if(meta.length) out.push(meta.join(" · "));
+    out.push("");
+    // 周期汇总评估表
+    out.push("【周期汇总评估表（SDK 侧归因）】");
+    const lblA=(inf.i_lblA||GROUP_DESC.A), lblB=(inf.i_lblB||GROUP_DESC.B), lblC=(inf.i_lblC||GROUP_DESC.C), lblD=(inf.i_lblD||GROUP_DESC.D);
+    out.push(csvRow(["观测指标",`A · ${lblA}`,`B · ${lblB}（实验组）`,`C · ${lblC}`,`D · ${lblD}`,"对照组合计(A+C+D)","B vs 对照 Δ%"]));
+    SUM_METRICS.forEach(m=>{
+      const cBase=m.raw(rm.cAgg, rm.cDer);
+      const vB=hasData(t.B)?m.raw(t.B,der.B):NaN;
+      const dlt = (isFinite(vB)&&rm.ctrl.length) ? relDelta(vB,cBase) : NaN;
+      const cell=(o,d)=>{ const x=m.raw(o,d); return isFinite(x)?fmtKind(m.kind,x):"—"; };
+      out.push(csvRow([m.n,
+        hasData(t.A)?cell(t.A,der.A):"—",
+        hasData(t.B)?cell(t.B,der.B):"—",
+        hasData(t.C)?cell(t.C,der.C):"—",
+        hasData(t.D)?cell(t.D,der.D):"—",
+        rm.ctrl.length?fmtKind(m.kind,cBase):"—",
+        pctFmt(dlt,1)
+      ]));
+    });
+    out.push("");
+    // 大盘溢出对比
+    out.push("【大盘溢出效应对比（ΣABCD 日合计 · 数据期前段 vs 后段）】");
+    out.push(`数据期共 ${sp.n} 天 · 前段 ${sp.preLabel} · 后段 ${sp.postLabel}`);
+    out.push(csvRow(["评估指标","前段均值","后段均值","变化 Δ%"]));
+    const sCell=(v,k)=> !isFinite(v)?"—":(k==="pct"?v.toFixed(2)+"%":k==="int"?Math.round(v).toString():k==="ratio"?v.toFixed(6):v.toFixed(4));
+    const spRows=[
+      ["大盘总请求数（日均）", sp.req, "int"],
+      ["大盘询价次数（日均）", sp.ask, "int"],
+      ["流量填充率", sp.fill, "pct"],
+      ["询价响应率", sp.askResp, "pct"],
+      ["大盘eCPM", sp.ecpm, "ecpm"],
+      ["询价响应eCPM", sp.askEcpm, "ecpm"],
+      ["大盘总收益（日均）", sp.rev, "ecpm"],
+      ["预估收益/DAU", sp.rpd, "ratio"],
+      ["预估收益/DEU", sp.rpe, "ratio"],
+      ["展示/DAU", sp.ipd, "ratio"],
+      ["展示/DEU", sp.ipe, "ratio"],
+    ];
+    spRows.forEach(([nm,o,k])=> out.push(csvRow([nm, sCell(o.pre,k), sCell(o.post,k), pctFmt(relDelta(o.post,o.pre),1)])));
+    out.push("");
+    // 研判
+    out.push("【结论判定（B 实验组 vs 大盘前→后 四场景研判）】");
+    out.push(csvRow(["收益/DAU Δ%","预估eCPM Δ%","展示/DAU Δ%","研判","建议"]));
+    out.push(csvRow([pctFmt(v.rdpd,2), pctFmt(v.rEcpm,2), pctFmt(v.rIpd,2),
+      v.tag==="none"?v.title:"场景"+v.tag+" · "+v.title, v.suggestion]));
+  });
+  return out.join("\n");
+}
+
+// ③ 数据录入与详情 CSV：原始逐日明细
+function buildDetailCsv(){
+  const head=["广告位名称","实验ID","日期","组别","请求","填充","展示","预估收益","DAU","DEU","询价","询价响应率","询价响应eCPM"];
+  const rows=[csvRow(head)];
+  state.experiments.forEach(e=>{
+    const nm=(e.info&&e.info.__plaName)||expLabel(e);
+    const eid=(e.info&&e.info.__src)||"";
     (e.days||[]).forEach(d=> GROUPS.forEach(g=>{
       const c=d[g]||{};
-      if(c.r||c.f||c.i||c.v) rows.push([nm,d.date,g,c.r||0,c.f||0,c.i||0,c.v||0]);
+      if(c.r||c.f||c.i||c.v||c.dau||c.deu||c.ask)
+        rows.push(csvRow([nm,eid,d.date,g, c.r||0, c.f||0, c.i||0, c.v||0, c.dau||0, c.deu||0, c.ask||0, c.askRespRate||0, c.askEcpm||0]));
     }));
   });
-  const csv="﻿"+rows.map(r=>r.join(",")).join("\n");
-  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
-  a.download=`RPR实验明细_全部广告位_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  return "[③ 数据录入与详情 · 原始逐日明细]\n"+rows.join("\n");
 }
+
+function exportCsv(){
+  const rangeSel=document.getElementById("exportRange");
+  const range = rangeSel ? rangeSel.value : "results";
+  const labelMap={results:"结果总览", compare:"全部实验对比", detail:"数据录入", all:"全部页面"};
+  let content;
+  if(range==="results") content=buildResultsCsv();
+  else if(range==="compare") content=buildCompareCsv();
+  else if(range==="detail") content=buildDetailCsv();
+  else content = buildResultsCsv()+"\n\n\n"+buildCompareCsv()+"\n\n\n"+buildDetailCsv();
+  const csv = "﻿" + content;
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`RPR实验工具_${labelMap[range]||"export"}_${new Date().toISOString().slice(0,10)}_${APP_VERSION}.csv`;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+
+// 旧入口保留为详情 CSV（向后兼容；如果有外部链接调用）
+function exportCSV(){ const sel=document.getElementById("exportRange"); if(sel) sel.value="detail"; exportCsv(); }
 function clearAll(){
   if(!confirm("将清空全部广告位实验数据（含本地缓存），不可恢复，确认？")) return;
   localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_KEY_OLD);
