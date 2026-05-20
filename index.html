@@ -205,9 +205,10 @@
 </div>
 
 <script>
-const APP_VERSION = "v1.6.0";
+const APP_VERSION = "v1.7.0";
 const BUILD_DATE = "2026-05-19";
 const CHANGELOG = [
+  ["v1.7.0","2026-05-19","实验名称改用「广告位名称（广告位ID）」(CSV 有对应列时自动识别)；大盘溢出新增 预估收益/DAU、预估收益/DEU 两行；首页顶部新增『全部实验研判汇总』预览表并按研判给出建议"],
   ["v1.6.0","2026-05-19","去掉实验下拉筛选，改为「全部实验同屏」：首页按实验逐个展示 周期汇总/大盘溢出/结论判定，可直接对比多个实验ID；第二页为 实验信息登记+逐日明细表+版本日志，新增空白实验在此页"],
   ["v1.5.1","2026-05-19","实验/对照判定写死：B 组固定为 RPR 实验组，A/C/D 一律对照组（不再依赖分组名称含 rpr 关键词）"],
   ["v1.5.0","2026-05-19","②④分析全面改为 rpr=实验组/其余=对照组（含流量占比、对照组合计基准）；③大盘溢出改为按 A+B+C+D 日合计自动计算（数据期前7天均值 vs 后7天均值），随数据实时同步；新建/导入实验名称去重并置顶显示"],
@@ -232,7 +233,7 @@ function num(v){ const n=parseFloat(v); return isNaN(n)?0:n; }
 function fmt(n,d=0){ if(!isFinite(n)) return "—"; return n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function pct(n,d=2){ if(!isFinite(n)) return "—"; return (n*100).toFixed(d)+"%"; }
 function uid(){ return "exp_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
-function blankDay(date){ const d={date:date||""}; GROUPS.forEach(g=> d[g]={r:"",f:"",i:"",v:""}); return d; }
+function blankDay(date){ const d={date:date||""}; GROUPS.forEach(g=> d[g]={r:"",f:"",i:"",v:"",dau:"",deu:""}); return d; }
 function blankExp(name){ return { id:uid(), info:{ i_name:name||"" }, days:[], spill:{} }; }
 function activeExp(){ return state.experiments.find(e=>e.id===state.activeId); }
 
@@ -282,17 +283,19 @@ function deltaInfo(b,a,goodDir){
 function fmtKind(k,x){ return k==="pct"?pct(x):k==="int"?fmt(x):fmt(x,2); }
 function computeSpillOf(e){
   const days=((e&&e.days)||[]).filter(d=>d.date).slice().sort((a,b)=>a.date.localeCompare(b.date));
-  const tot=days.map(d=>{ let r=0,f=0,i=0,v=0; GROUPS.forEach(g=>{const c=d[g]||{}; r+=num(c.r);f+=num(c.f);i+=num(c.i);v+=num(c.v);}); return {date:d.date,r,f,i,v}; });
+  const tot=days.map(d=>{ let r=0,f=0,i=0,v=0,dau=0,deu=0; GROUPS.forEach(g=>{const c=d[g]||{}; r+=num(c.r);f+=num(c.f);i+=num(c.i);v+=num(c.v);dau+=num(c.dau);deu+=num(c.deu);}); return {date:d.date,r,f,i,v,dau,deu}; });
   const n=tot.length;
   let preArr,postArr;
   if(n<2){ preArr=tot; postArr=tot; }
   else { const preC=Math.min(7,Math.floor(n/2)); const postC=Math.min(7,n-preC); preArr=tot.slice(0,preC); postArr=tot.slice(n-postC); }
-  const agg=arr=>{ let r=0,f=0,i=0,v=0; arr.forEach(x=>{r+=x.r;f+=x.f;i+=x.i;v+=x.v;}); const c=arr.length||1;
-    return { reqAvg:r/c,revAvg:v/c,fillPct:r>0?f/r*100:NaN,ecpm:i>0?v/i*1000:NaN }; };
+  const agg=arr=>{ let r=0,f=0,i=0,v=0,dau=0,deu=0; arr.forEach(x=>{r+=x.r;f+=x.f;i+=x.i;v+=x.v;dau+=x.dau;deu+=x.deu;}); const c=arr.length||1;
+    return { reqAvg:r/c,revAvg:v/c,fillPct:r>0?f/r*100:NaN,ecpm:i>0?v/i*1000:NaN, revPerDau:dau>0?v/dau:NaN, revPerDeu:deu>0?v/deu:NaN }; };
   const A=agg(preArr),B=agg(postArr);
   const lbl=arr=>arr.length?`${arr[0].date} ~ ${arr[arr.length-1].date}（${arr.length}天）`:"—";
   return { n, req:{pre:A.reqAvg,post:B.reqAvg}, rev:{pre:A.revAvg,post:B.revAvg},
-    fill:{pre:A.fillPct,post:B.fillPct}, ecpm:{pre:A.ecpm,post:B.ecpm}, preLabel:lbl(preArr), postLabel:lbl(postArr) };
+    fill:{pre:A.fillPct,post:B.fillPct}, ecpm:{pre:A.ecpm,post:B.ecpm},
+    rpd:{pre:A.revPerDau,post:B.revPerDau}, rpe:{pre:A.revPerDeu,post:B.revPerDeu},
+    preLabel:lbl(preArr), postLabel:lbl(postArr) };
 }
 function classify(vd,rd,qd){
   const vpmWin=vd>SIG, vpmFlat=Math.abs(vd)<=SIG;
@@ -341,13 +344,15 @@ function summaryHTML(e,t,der,rm){
 }
 function spillHTML(e,sp){
   const win = sp.n? `数据期共 <strong>${sp.n}</strong> 天　｜　前段：<strong>${sp.preLabel}</strong>　vs　后段：<strong>${sp.postLabel}</strong>${sp.n<14?`　<span class="neg">（不足14天，前后取数据期前/后半段）</span>`:""}` : "该实验暂无带日期的数据";
-  const cell=(v,kind)=> isFinite(v)?(kind==="pct"?v.toFixed(2)+"%":kind==="int"?fmt(Math.round(v)):fmt(v,2)):"—";
+  const cell=(v,kind)=> isFinite(v)?(kind==="pct"?v.toFixed(2)+"%":kind==="int"?fmt(Math.round(v)):kind==="ratio"?v.toFixed(6):fmt(v,2)):"—";
   const dcell=(b,a,gd)=>{ const di=deltaInfo(b,a,gd); return di.txt?`<span class="${di.cls}">${di.txt}</span>`:"—"; };
   const rows=[
     ["大盘总请求数（日均）",sp.req,"int","down","广告位服务器请求压力下降"],
     ["广告平台真实填充率 %",sp.fill,"pct","up","平台算法感知流量变好，愿意给填充"],
     ["大盘整体真实 eCPM",sp.ecpm,"rev","up","<strong>核心红利！</strong>平台算法调高该 Unit 整体出价"],
     ["大盘总收益（日均）",sp.rev,"rev","up","<strong>最终大决战指标！</strong>证明降本且增效"],
+    ["预估收益/DAU（大盘总收益÷总DAU）",sp.rpd,"ratio","up","单日活用户产值，越高说明用户变现效率越好"],
+    ["预估收益/DEU（大盘总收益÷总DEU）",sp.rpe,"ratio","up","单有效用户产值，越高说明有效用户变现效率越好"],
   ].map(([nm,o,k,gd,note])=>`<tr><td class="metric-name">${nm}</td><td class="calc muted">${cell(o.pre,k)}</td><td class="calc muted">${cell(o.post,k)}</td><td class="calc">${dcell(o.post,o.pre,gd)}</td><td style="text-align:left;font-size:12.5px">${note}</td></tr>`).join("");
   return `<div style="font-size:12.5px;color:#4a5568;margin:4px 0 8px">${win}</div>
    <div class="table-wrap"><table><thead><tr><th style="text-align:left">评估指标（Unit 大盘总计 = ΣABCD）</th><th>数据期前段均值</th><th>数据期后段均值</th><th>实际变化</th><th>溢出价值判定</th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -387,6 +392,48 @@ function verdictHTML(e,der,t,rm,sp){
       : `<div class="reco">⚠️ B 实验组 VPM 未显著跑赢对照组合计（阈值 ${(SIG*100)}%）。当前策略未跑出效率优势，建议检查词表/调整 Base_Rate 或继续观察。</div>`;
   }
   return `<div class="kpi-row">${kpi}</div>${box}${reco}`;
+}
+function expVerdict(e){
+  const t=totalsOf(e); const rm=roleModelOf(e,t); const sp=computeSpillOf(e);
+  const der={}; GROUPS.forEach(g=>der[g]=derived(t[g]));
+  const cVpm=rm.cDer.vpm;
+  const r={ name:expLabel(e), placement:(e.info&&e.info.i_placement)||"", bVpm:der.B?der.B.vpm:NaN, cVpm,
+    vd:NaN, rd:relDelta(sp.rev.post,sp.rev.pre), qd:relDelta(sp.req.post,sp.req.pre),
+    tag:"none", title:"数据不足", suggestion:"—", n:sp.n };
+  if(!rm.treat.length){ r.title="无 B 实验组数据"; r.suggestion="导入/录入 B 组数据"; return r; }
+  if(!rm.ctrl.length || !isFinite(cVpm) || cVpm<=0){ r.title="无对照组数据"; r.suggestion="补充 A/C/D 任一对照组数据"; return r; }
+  r.vd=relDelta(der.B.vpm, cVpm);
+  if(sp.n<2){ r.tag="none"; r.title="待大盘数据"; r.suggestion="继续积累 ≥2 天带日期数据后自动判定"; return r; }
+  const c=classify(r.vd, r.rd, r.qd);
+  r.tag=c.tag; r.title=c.title;
+  r.suggestion = c.tag==="A" ? "通过测试，逐步扩大 B 组灰度比例"
+    : c.tag==="B" ? "收益持平但显著降本，可全量"
+    : c.tag==="C" ? "立即熔断 B；调高 Base_Rate 兜底或退回回测重校准词表"
+    : "信号混合，结合显著性检验人工研判";
+  return r;
+}
+function summaryBoardHTML(){
+  if(!state.experiments.length) return "<p style='color:#a0aec0'>暂无实验</p>";
+  const pctTxt=x=> isFinite(x)?((x>=0?"+":"")+(x*100).toFixed(1)+"%"):"—";
+  const clsOf=(x,good)=> !isFinite(x)?"neu":(Math.abs(x)<SIG?"neu":((x>0)===good?"pos":"neg"));
+  const rows=state.experiments.map(e=>{
+    const r=expVerdict(e);
+    const tagHtml=`<span class="verdict-tag ${r.tag}">${r.tag==="none"?r.title:"情况 "+r.tag+" · "+r.title}</span>`;
+    return `<tr>
+      <td class="metric-name">${esc(r.name)}</td>
+      <td class="calc">${isFinite(r.bVpm)?fmt(r.bVpm,3):"—"}</td>
+      <td class="calc muted">${isFinite(r.cVpm)?fmt(r.cVpm,3):"—"}</td>
+      <td class="calc"><span class="${clsOf(r.vd,true)}">${pctTxt(r.vd)}</span></td>
+      <td class="calc"><span class="${clsOf(r.rd,true)}">${pctTxt(r.rd)}</span></td>
+      <td class="calc"><span class="${clsOf(r.qd,false)}">${pctTxt(r.qd)}</span></td>
+      <td>${tagHtml}</td>
+      <td style="text-align:left;font-size:12.5px">${r.suggestion}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="table-wrap"><table>
+    <thead><tr><th style="text-align:left">广告位（实验）</th><th>B实验组 VPM</th><th>对照合计 VPM</th><th>VPM vs对照</th><th>大盘收益Δ</th><th>大盘请求Δ</th><th>研判</th><th style="text-align:left">建议</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>
+    <div class="hint">研判规则：情况A=VPM跑赢且大盘收益涨；情况B=VPM跑赢且收益持平但大盘请求↓约30%；情况C=VPM拉不开且大盘收益跌；其余为混合信号。显著阈值 ±${SIG*100}%。</div>`;
 }
 function overviewCardHTML(e){
   const t=totalsOf(e); const der={}; GROUPS.forEach(g=>der[g]=derived(t[g]));
@@ -467,7 +514,12 @@ function detailCardHTML(e){
 
 /* ---------- renderers ---------- */
 function renderOverview(){
-  const c=document.getElementById("overviewList"); if(c) c.innerHTML=state.experiments.map(overviewCardHTML).join("");
+  const c=document.getElementById("overviewList");
+  if(c){
+    const board=`<section style="border:2px solid #2b6cb0;border-radius:10px;padding:16px 18px;margin-bottom:20px;background:#f7faff">
+      <h2 style="border:0;margin:0 0 10px;color:#1a365d">📋 全部实验研判汇总（预览）</h2>${summaryBoardHTML()}</section>`;
+    c.innerHTML = board + state.experiments.map(overviewCardHTML).join("");
+  }
   const ec=document.getElementById("expCount"); if(ec) ec.textContent=`共 ${state.experiments.length} 个实验`;
 }
 function renderDetail(){
@@ -537,7 +589,7 @@ function normalize(st){
   if(!st||!Array.isArray(st.experiments)||!st.experiments.length){ state={experiments:[blankExp("新广告位实验 1")]}; }
   else state=st;
   state.experiments.forEach(e=>{ e.id=e.id||uid(); e.info=e.info||{};
-    e.days=(e.days||[]).map(d=>{ const nd=blankDay(d.date||""); GROUPS.forEach(g=>{ if(d[g]) nd[g]={r:d[g].r||"",f:d[g].f||"",i:d[g].i||"",v:d[g].v||""}; }); return nd; });
+    e.days=(e.days||[]).map(d=>{ const nd=blankDay(d.date||""); GROUPS.forEach(g=>{ if(d[g]) nd[g]={r:d[g].r||"",f:d[g].f||"",i:d[g].i||"",v:d[g].v||"",dau:d[g].dau||"",deu:d[g].deu||""}; }); return nd; });
     const w=e.info.__w; if(w&&Object.keys(w).length) e.info.i_split=GROUPS.filter(g=>w[g]!=null).map(g=>`${g}:${w[g]}%`).join(" | "); });
 }
 function load(){
@@ -679,24 +731,39 @@ function importRprRaw(rows){
     date:colIdx(H,["日期"]), name:colIdx(H,["分组名称"]), exp:colIdx(H,["实验ID"]),
     weight:colIdx(H,["权重"]),
     rev:colIdx(H,["预估收益"]), req:colIdx(H,["流量请求"]), fillR:colIdx(H,["流量填充率"]),
-    imp:colIdx(H,["展示"])
+    imp:colIdx(H,["展示"]),
+    plaName:colIdx(H,["广告位名称","广告位","Placement名称","placement名称"]),
+    plaId:colIdx(H,["广告位ID","广告位Id","广告位id","PlacementID","placement_id","placementid"]),
+    dau:colIdx(H,["DAU"]), deu:colIdx(H,["DEU"])
   };
-  // 避免“展示/DAU”“展示率”等误匹配：精确取“展示”列
+  // 避免“展示/DAU”“展示率”等误匹配：精确取“展示/DAU/DEU”列
   ci.imp = H.findIndex(h=> h.trim()==="展示"); if(ci.imp<0) ci.imp=colIdx(H,["展示"]);
+  ci.dau = H.findIndex(h=> h.trim()==="DAU"); if(ci.dau<0) ci.dau=colIdx(H,["DAU"]);
+  ci.deu = H.findIndex(h=> h.trim()==="DEU"); if(ci.deu<0) ci.deu=colIdx(H,["DEU"]);
   let byExp={}, added=0, created=[];
   state.experiments.forEach(e=>{ const m=(e.info&&e.info.__src)||null; if(m) byExp[m]=e; });
   for(let k=1;k<rows.length;k++){
     const c=rows[k]; if(!c||c.length<5) continue;
     const date=toISODate(c[ci.date]); const expId=(c[ci.exp]||"").trim();
     const gl=groupLetter(c[ci.name]); if(!date||!expId||!gl) continue;
+    const pn = ci.plaName>=0 ? (c[ci.plaName]||"").trim() : "";
+    const pid = ci.plaId>=0 ? (c[ci.plaId]||"").trim() : "";
     let e=byExp[expId];
-    if(!e){ e=blankExp(uniqueName("实验ID "+expId)); e.info.i_placement="实验ID "+expId; e.info.__src=expId; e.info.__w={}; state.experiments.push(e); byExp[expId]=e; created.push(e); }
+    if(!e){
+      let nm = (pn&&pid)?`${pn}（${pid}）` : pn || pid || ("实验ID "+expId);
+      e=blankExp(uniqueName(nm)); e.info.i_placement = pid || pn || ("实验ID "+expId);
+      e.info.__src=expId; e.info.__w={}; state.experiments.push(e); byExp[expId]=e; created.push(e);
+    } else if((pn||pid) && /^实验ID /.test(e.info.i_name||"")){
+      // 旧记录无广告位信息时，后续行补全名称
+      e.info.i_name = (pn&&pid)?`${pn}（${pid}）` : pn || pid; e.info.i_placement = pid || pn || e.info.i_placement;
+    }
     e.info["i_lbl"+gl]=(c[ci.name]||"").trim();
     if(ci.weight>=0){ const wm=(c[ci.weight]||"").match(/[\d.]+/); if(wm){ e.info.__w=e.info.__w||{}; e.info.__w[gl]=parseFloat(wm[0]); } }
     const req=num(c[ci.req]), fillRate=num(c[ci.fillR]), imp=num(c[ci.imp]), rev=num(c[ci.rev]);
+    const dau=ci.dau>=0?num(c[ci.dau]):0, deu=ci.deu>=0?num(c[ci.deu]):0;
     let day=e.days.find(d=>d.date===date);
     if(!day){ day=blankDay(date); e.days.push(day); }
-    day[gl]={ r:req||"", f: req&&fillRate? Math.round(req*fillRate):"" , i:imp||"", v:rev||"" };
+    day[gl]={ r:req||"", f: req&&fillRate? Math.round(req*fillRate):"" , i:imp||"", v:rev||"", dau:dau||"", deu:deu||"" };
     added++;
   }
   state.experiments.forEach(e=> e.days.sort((a,b)=> (a.date||"").localeCompare(b.date||"")));
