@@ -207,9 +207,10 @@
 </div>
 
 <script>
-const APP_VERSION = "v1.8.0";
+const APP_VERSION = "v1.8.1";
 const BUILD_DATE = "2026-05-20";
 const CHANGELOG = [
+  ["v1.8.1","2026-05-20","汇总表「广告位（实验）」列扩展为多行：广告位名称(加粗) + UUID/系统平台/应用名/应用UUID/开发者ID/开发者名称（CSV 有对应列时自动识别）；周期汇总评估表新增 总询价数、询价响应率、询价响应eCPM 三项指标"],
   ["v1.8.0","2026-05-20","研判模型升级为「大盘前→后 四场景决策矩阵」：基于 收益/DAU、预估eCPM、展示/DAU 三指标判定 场景A完美通关/B技术性通关/C恶性循环/D价格截胡；首页汇总表与每实验判定卡同步重写，建议与场景一一对应"],
   ["v1.7.1","2026-05-19","汇总表与卡片标题改为两行：第1行=广告位名称，第2行=广告位ID/实验ID（无名称列时显示『未命名广告位 · 实验ID xxxx』）"],
   ["v1.7.0","2026-05-19","实验名称改用「广告位名称（广告位ID）」(CSV 有对应列时自动识别)；大盘溢出新增 预估收益/DAU、预估收益/DEU 两行；首页顶部新增『全部实验研判汇总』预览表并按研判给出建议"],
@@ -239,7 +240,7 @@ function num(v){ const n=parseFloat(v); return isNaN(n)?0:n; }
 function fmt(n,d=0){ if(!isFinite(n)) return "—"; return n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function pct(n,d=2){ if(!isFinite(n)) return "—"; return (n*100).toFixed(d)+"%"; }
 function uid(){ return "exp_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
-function blankDay(date){ const d={date:date||""}; GROUPS.forEach(g=> d[g]={r:"",f:"",i:"",v:"",dau:"",deu:""}); return d; }
+function blankDay(date){ const d={date:date||""}; GROUPS.forEach(g=> d[g]={r:"",f:"",i:"",v:"",dau:"",deu:"",ask:"",askRespRate:"",askEcpm:""}); return d; }
 function blankExp(name){ return { id:uid(), info:{ i_name:name||"" }, days:[], spill:{} }; }
 function activeExp(){ return state.experiments.find(e=>e.id===state.activeId); }
 
@@ -275,6 +276,35 @@ function expDisplay(e){
   }
   return { top, bot };
 }
+// 汇总表第一列的多行展示：广告位名称（加粗）/UUID/系统平台/应用名/应用UUID/开发者ID/开发者名称
+function expDisplayFull(e){
+  const inf=e&&e.info||{};
+  const pn=(inf.__plaName||"").trim();
+  const pUuid=(inf.__plaUuid||"").trim();
+  const os=(inf.__os||"").trim();
+  const appName=(inf.__appName||"").trim();
+  const appUuid=(inf.__appUuid||"").trim();
+  const devId=(inf.__devId||"").trim();
+  const devName=(inf.__devName||"").trim();
+  const eid=(inf.__src||"").trim();
+  const fallback=(inf.i_name||"").trim();
+  // 第1行：广告位名称（加粗，必显）
+  const headTop = pn ? esc(pn) : (fallback ? esc(fallback) : `<span style="color:#a0aec0">未命名广告位</span>`);
+  // 后续小字行（按用户给定顺序）
+  const lines=[];
+  if(pUuid) lines.push(`<span style="color:#718096">广告位UUID</span> ${esc(pUuid)}`);
+  else if(eid) lines.push(`<span style="color:#718096">实验ID</span> ${esc(eid)}`);
+  if(os) lines.push(`<span style="color:#718096">系统平台</span> ${esc(os)}`);
+  if(appName) lines.push(`<span style="color:#718096">应用名称</span> ${esc(appName)}`);
+  if(appUuid) lines.push(`<span style="color:#718096">应用UUID</span> ${esc(appUuid)}`);
+  if(devId) lines.push(`<span style="color:#718096">开发者ID</span> ${esc(devId)}`);
+  if(devName) lines.push(`<span style="color:#718096">开发者名称</span> ${esc(devName)}`);
+  let out = `<div style="font-weight:700;font-size:13.5px;color:#1a365d">${headTop}</div>`;
+  if(lines.length){
+    out += `<div style="font-size:11.5px;color:#4a5568;margin-top:3px;line-height:1.7">${lines.join("<br>")}</div>`;
+  }
+  return out;
+}
 function uniqueName(base){
   const names=new Set(state.experiments.map(x=>expLabel(x)));
   if(!names.has(base)) return base;
@@ -283,17 +313,28 @@ function uniqueName(base){
 }
 function findExp(id){ return state.experiments.find(e=>e.id===id); }
 function derived(o){ return {
-  showRate:o.f>0?o.i/o.f:NaN, vpm:o.r>0?o.v/o.r*1000:NaN, ipm:o.r>0?o.i/o.r*1000:NaN, ecpm:o.i>0?o.v/o.i*1000:NaN }; }
+  showRate:o.f>0?o.i/o.f:NaN, vpm:o.r>0?o.v/o.r*1000:NaN, ipm:o.r>0?o.i/o.r*1000:NaN, ecpm:o.i>0?o.v/o.i*1000:NaN,
+  askRespRate: o.ask>0 ? o.resp/o.ask : NaN,
+  askRespEcpm: o.resp>0 ? o.respWE/o.resp : NaN
+}; }
 function hasData(o){ return o.r>0||o.f>0||o.i>0||o.v>0; }
 function isTreat(e,g){ return g==="B"; } // 写死：B=RPR实验组，A/C/D=对照组
 function grpWeight(e,g){ const w=e&&e.info&&e.info.__w; return (w&&w[g]!=null)?w[g]:null; }
-function totalsOf(e){ const t={}; GROUPS.forEach(g=>t[g]={r:0,f:0,i:0,v:0});
-  ((e&&e.days)||[]).forEach(d=>GROUPS.forEach(g=>{const c=d[g]||{}; t[g].r+=num(c.r);t[g].f+=num(c.f);t[g].i+=num(c.i);t[g].v+=num(c.v);})); return t; }
+function totalsOf(e){ const t={}; GROUPS.forEach(g=>t[g]={r:0,f:0,i:0,v:0,ask:0,resp:0,respWE:0});
+  ((e&&e.days)||[]).forEach(d=>GROUPS.forEach(g=>{
+    const c=d[g]||{};
+    t[g].r+=num(c.r); t[g].f+=num(c.f); t[g].i+=num(c.i); t[g].v+=num(c.v);
+    const ask=num(c.ask), rate=num(c.askRespRate), ae=num(c.askEcpm);
+    const resp = ask*rate;
+    t[g].ask+=ask; t[g].resp+=resp; t[g].respWE+=resp*ae;
+  })); return t; }
 function roleModelOf(e,t){
   const present=GROUPS.filter(g=>hasData(t[g]));
   const treat=present.filter(g=>isTreat(e,g));
   const ctrl=present.filter(g=>!isTreat(e,g));
-  const cAgg={r:0,f:0,i:0,v:0}; ctrl.forEach(g=>{cAgg.r+=t[g].r;cAgg.f+=t[g].f;cAgg.i+=t[g].i;cAgg.v+=t[g].v;});
+  const cAgg={r:0,f:0,i:0,v:0,ask:0,resp:0,respWE:0};
+  ctrl.forEach(g=>{ cAgg.r+=t[g].r;cAgg.f+=t[g].f;cAgg.i+=t[g].i;cAgg.v+=t[g].v;
+    cAgg.ask+=t[g].ask;cAgg.resp+=t[g].resp;cAgg.respWE+=t[g].respWE; });
   return { e, present, treat, ctrl, cAgg, cDer:derived(cAgg) };
 }
 function relDelta(b,a){ if(a===0) return b===0?0:Infinity; return (b-a)/Math.abs(a); }
@@ -378,6 +419,9 @@ const SUM_METRICS=[
   {n:"6. 千次请求收益 VPM", kind:"rev", raw:(o,d)=>d.vpm, gd:"up", exp:"实验组大幅跑赢对照 ⬆️", note:"破局第一指标！单位请求变现效率"},
   {n:"7. 千次请求展示 IPM", kind:"rev", raw:(o,d)=>d.ipm, gd:"up", exp:"实验组大幅跑赢对照 ⬆️", note:"辅助证明实验组请求的含金量"},
   {n:"8. SDK 端 eCPM", kind:"rev", raw:(o,d)=>d.ecpm, gd:"flat", exp:"几乎持平 ➡️", note:"受共有实体污染，各组单价通常趋同"},
+  {n:"9. 总询价数 Asks", kind:"int", raw:(o,d)=>o.ask, gd:"down", exp:"实验组下降 ⬇️", note:"过滤后 bidding 询价次数同步下降，降本佐证"},
+  {n:"10. 询价响应率", kind:"pct", raw:(o,d)=>d.askRespRate, gd:"up", exp:"持平或上涨 ➡️/⬆️", note:"广告源对询价回应比例，反映广告源对流量的认可度"},
+  {n:"11. 询价响应eCPM", kind:"rev", raw:(o,d)=>d.askRespEcpm, gd:"up", exp:"上涨 ⬆️", note:"询价响应价格的加权平均，越高说明流量越值钱"},
 ];
 function summaryHTML(e,t,der,rm){
   let head=`<th style="text-align:left">观测指标（SDK 侧归因）</th>`;
@@ -472,10 +516,10 @@ function summaryBoardHTML(){
   // 颜色：>FLAT 上涨=good；<-FLAT 下跌=bad；其余中性
   const clsUp=(x)=>!isFinite(x)?"neu":(x>FLAT_THR?"pos":x<-FLAT_THR?"neg":"neu");
   const rows=state.experiments.map(e=>{
-    const r=expVerdict(e); const dd=expDisplay(e);
+    const r=expVerdict(e);
     const tagHtml=`<span class="verdict-tag ${r.tag}">${r.tag==="none"?r.title:"场景 "+r.tag+" · "+r.title.replace(/^场景[一二三四] · /,"")}</span>`;
     return `<tr>
-      <td class="metric-name"><div style="font-weight:700">${dd.top}</div>${dd.bot?`<div style="font-size:11.5px;color:#718096;margin-top:2px;font-weight:500">${dd.bot}</div>`:""}</td>
+      <td class="metric-name" style="vertical-align:top;min-width:220px">${expDisplayFull(e)}</td>
       <td class="calc"><span class="${clsUp(r.rdpd)}">${arrow(r.rdpd,FLAT_THR)} ${pctTxt(r.rdpd)}</span></td>
       <td class="calc"><span class="${clsUp(r.rEcpm)}">${arrow(r.rEcpm,FLAT_THR)} ${pctTxt(r.rEcpm)}</span></td>
       <td class="calc"><span class="${clsUp(r.rIpd)}">${arrow(r.rIpd,FLAT_THR)} ${pctTxt(r.rIpd)}</span></td>
@@ -648,7 +692,7 @@ function normalize(st){
   if(!st||!Array.isArray(st.experiments)||!st.experiments.length){ state={experiments:[blankExp("新广告位实验 1")]}; }
   else state=st;
   state.experiments.forEach(e=>{ e.id=e.id||uid(); e.info=e.info||{};
-    e.days=(e.days||[]).map(d=>{ const nd=blankDay(d.date||""); GROUPS.forEach(g=>{ if(d[g]) nd[g]={r:d[g].r||"",f:d[g].f||"",i:d[g].i||"",v:d[g].v||"",dau:d[g].dau||"",deu:d[g].deu||""}; }); return nd; });
+    e.days=(e.days||[]).map(d=>{ const nd=blankDay(d.date||""); GROUPS.forEach(g=>{ if(d[g]) nd[g]={r:d[g].r||"",f:d[g].f||"",i:d[g].i||"",v:d[g].v||"",dau:d[g].dau||"",deu:d[g].deu||"",ask:d[g].ask||"",askRespRate:d[g].askRespRate||"",askEcpm:d[g].askEcpm||""}; }); return nd; });
     const w=e.info.__w; if(w&&Object.keys(w).length) e.info.i_split=GROUPS.filter(g=>w[g]!=null).map(g=>`${g}:${w[g]}%`).join(" | "); });
 }
 function load(){
@@ -793,12 +837,22 @@ function importRprRaw(rows){
     imp:colIdx(H,["展示"]),
     plaName:colIdx(H,["广告位名称","广告位","Placement名称","placement名称"]),
     plaId:colIdx(H,["广告位ID","广告位Id","广告位id","PlacementID","placement_id","placementid"]),
-    dau:colIdx(H,["DAU"]), deu:colIdx(H,["DEU"])
+    plaUuid:colIdx(H,["广告位UUID","广告位uuid","placementUUID","placement_uuid"]),
+    os:colIdx(H,["系统平台","操作系统","Platform","平台","OS"]),
+    appName:colIdx(H,["应用名称","App名称","App","应用"]),
+    appUuid:colIdx(H,["应用UUID","应用uuid","appUUID","app_uuid","应用ID","应用Id"]),
+    devId:colIdx(H,["开发者ID","开发者Id","开发者id","developerId","developer_id"]),
+    devName:colIdx(H,["开发者名称","开发者","developerName","developer_name"]),
+    dau:colIdx(H,["DAU"]), deu:colIdx(H,["DEU"]),
+    ask:colIdx(H,["询价"]), askRespRate:colIdx(H,["询价响应率"]), askEcpm:colIdx(H,["询价响应eCPM","询价响应ecpm"])
   };
-  // 避免“展示/DAU”“展示率”等误匹配：精确取“展示/DAU/DEU”列
+  // 避免“展示/DAU”“展示率”等误匹配：精确取“展示/DAU/DEU/询价/询价响应率/询价响应eCPM”列
   ci.imp = H.findIndex(h=> h.trim()==="展示"); if(ci.imp<0) ci.imp=colIdx(H,["展示"]);
   ci.dau = H.findIndex(h=> h.trim()==="DAU"); if(ci.dau<0) ci.dau=colIdx(H,["DAU"]);
   ci.deu = H.findIndex(h=> h.trim()==="DEU"); if(ci.deu<0) ci.deu=colIdx(H,["DEU"]);
+  ci.ask = H.findIndex(h=> h.trim()==="询价"); if(ci.ask<0) ci.ask=colIdx(H,["询价"]);
+  ci.askRespRate = H.findIndex(h=> h.trim()==="询价响应率"); if(ci.askRespRate<0) ci.askRespRate=colIdx(H,["询价响应率"]);
+  ci.askEcpm = H.findIndex(h=> h.trim()==="询价响应eCPM"); if(ci.askEcpm<0) ci.askEcpm=colIdx(H,["询价响应eCPM","询价响应ecpm"]);
   let byExp={}, added=0, created=[];
   state.experiments.forEach(e=>{ const m=(e.info&&e.info.__src)||null; if(m) byExp[m]=e; });
   for(let k=1;k<rows.length;k++){
@@ -807,11 +861,19 @@ function importRprRaw(rows){
     const gl=groupLetter(c[ci.name]); if(!date||!expId||!gl) continue;
     const pn = ci.plaName>=0 ? (c[ci.plaName]||"").trim() : "";
     const pid = ci.plaId>=0 ? (c[ci.plaId]||"").trim() : "";
+    const pUuid = ci.plaUuid>=0 ? (c[ci.plaUuid]||"").trim() : "";
+    const os = ci.os>=0 ? (c[ci.os]||"").trim() : "";
+    const appNm = ci.appName>=0 ? (c[ci.appName]||"").trim() : "";
+    const appUu = ci.appUuid>=0 ? (c[ci.appUuid]||"").trim() : "";
+    const devI = ci.devId>=0 ? (c[ci.devId]||"").trim() : "";
+    const devN = ci.devName>=0 ? (c[ci.devName]||"").trim() : "";
     let e=byExp[expId];
     if(!e){
       let nm = (pn&&pid)?`${pn}（${pid}）` : pn || pid || ("实验ID "+expId);
       e=blankExp(uniqueName(nm)); e.info.i_placement = pid || pn || ("实验ID "+expId);
       e.info.__src=expId; e.info.__w={}; e.info.__plaName=pn||""; e.info.__plaId=pid||"";
+      e.info.__plaUuid=pUuid||""; e.info.__os=os||""; e.info.__appName=appNm||"";
+      e.info.__appUuid=appUu||""; e.info.__devId=devI||""; e.info.__devName=devN||"";
       state.experiments.push(e); byExp[expId]=e; created.push(e);
     } else if((pn||pid) && /^实验ID /.test(e.info.i_name||"")){
       // 旧记录无广告位信息时，后续行补全名称
@@ -821,13 +883,24 @@ function importRprRaw(rows){
       if(pn && !e.info.__plaName) e.info.__plaName=pn;
       if(pid && !e.info.__plaId) e.info.__plaId=pid;
     }
+    // 补全广告位扩展字段（首次出现即写入）
+    if(pUuid && !e.info.__plaUuid) e.info.__plaUuid=pUuid;
+    if(os && !e.info.__os) e.info.__os=os;
+    if(appNm && !e.info.__appName) e.info.__appName=appNm;
+    if(appUu && !e.info.__appUuid) e.info.__appUuid=appUu;
+    if(devI && !e.info.__devId) e.info.__devId=devI;
+    if(devN && !e.info.__devName) e.info.__devName=devN;
     e.info["i_lbl"+gl]=(c[ci.name]||"").trim();
     if(ci.weight>=0){ const wm=(c[ci.weight]||"").match(/[\d.]+/); if(wm){ e.info.__w=e.info.__w||{}; e.info.__w[gl]=parseFloat(wm[0]); } }
     const req=num(c[ci.req]), fillRate=num(c[ci.fillR]), imp=num(c[ci.imp]), rev=num(c[ci.rev]);
     const dau=ci.dau>=0?num(c[ci.dau]):0, deu=ci.deu>=0?num(c[ci.deu]):0;
+    const ask=ci.ask>=0?num(c[ci.ask]):0;
+    const aRate=ci.askRespRate>=0?num(c[ci.askRespRate]):0;
+    const aEcpm=ci.askEcpm>=0?num(c[ci.askEcpm]):0;
     let day=e.days.find(d=>d.date===date);
     if(!day){ day=blankDay(date); e.days.push(day); }
-    day[gl]={ r:req||"", f: req&&fillRate? Math.round(req*fillRate):"" , i:imp||"", v:rev||"", dau:dau||"", deu:deu||"" };
+    day[gl]={ r:req||"", f: req&&fillRate? Math.round(req*fillRate):"" , i:imp||"", v:rev||"", dau:dau||"", deu:deu||"",
+      ask:ask||"", askRespRate:aRate||"", askEcpm:aEcpm||"" };
     added++;
   }
   state.experiments.forEach(e=> e.days.sort((a,b)=> (a.date||"").localeCompare(b.date||"")));
