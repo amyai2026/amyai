@@ -112,12 +112,14 @@
   .verdict-card.A { border-color: #38a169; background: #f0fff4; }
   .verdict-card.B { border-color: #3182ce; background: #ebf8ff; }
   .verdict-card.C { border-color: #e53e3e; background: #fff5f5; }
+  .verdict-card.D { border-color: #dd6b20; background: #fffaf0; }
   .verdict-card.none { border-color: #cbd5e0; }
   .verdict-card h3 { margin: 0 0 6px; color: inherit; }
   .verdict-tag { display: inline-block; padding: 3px 11px; border-radius: 14px; font-size: 12.5px; font-weight: 700; margin-bottom: 8px; }
   .verdict-tag.A { background: #38a169; color: #fff; }
   .verdict-tag.B { background: #3182ce; color: #fff; }
   .verdict-tag.C { background: #e53e3e; color: #fff; }
+  .verdict-tag.D { background: #dd6b20; color: #fff; }
   .verdict-tag.none { background: #a0aec0; color: #fff; }
   .verdict-card ul { margin: 6px 0 0 18px; font-size: 13px; }
   .verdict-card li { margin-bottom: 3px; }
@@ -205,9 +207,10 @@
 </div>
 
 <script>
-const APP_VERSION = "v1.7.1";
-const BUILD_DATE = "2026-05-19";
+const APP_VERSION = "v1.8.0";
+const BUILD_DATE = "2026-05-20";
 const CHANGELOG = [
+  ["v1.8.0","2026-05-20","研判模型升级为「大盘前→后 四场景决策矩阵」：基于 收益/DAU、预估eCPM、展示/DAU 三指标判定 场景A完美通关/B技术性通关/C恶性循环/D价格截胡；首页汇总表与每实验判定卡同步重写，建议与场景一一对应"],
   ["v1.7.1","2026-05-19","汇总表与卡片标题改为两行：第1行=广告位名称，第2行=广告位ID/实验ID（无名称列时显示『未命名广告位 · 实验ID xxxx』）"],
   ["v1.7.0","2026-05-19","实验名称改用「广告位名称（广告位ID）」(CSV 有对应列时自动识别)；大盘溢出新增 预估收益/DAU、预估收益/DEU 两行；首页顶部新增『全部实验研判汇总』预览表并按研判给出建议"],
   ["v1.6.0","2026-05-19","去掉实验下拉筛选，改为「全部实验同屏」：首页按实验逐个展示 周期汇总/大盘溢出/结论判定，可直接对比多个实验ID；第二页为 实验信息登记+逐日明细表+版本日志，新增空白实验在此页"],
@@ -221,7 +224,9 @@ const CHANGELOG = [
 ];
 const LS_KEY = "rpr_ab_experiment_v2";
 const LS_KEY_OLD = "rpr_ab_experiment_v1";
-const SIG = 0.05;
+const SIG = 0.05;          // 显著阈值 5%
+const FLAT_THR = 0.02;     // 持平阈值 ±2%
+const CRASH_THR = 0.15;    // 断崖/大跌阈值 15%
 const GROUPS = ["A","B","C","D"];
 const GROUP_DESC = {A:"对照(不干预)",B:"变体B",C:"变体C",D:"变体D"};
 const VARIANTS = ["B","C","D"];
@@ -309,22 +314,58 @@ function computeSpillOf(e){
   if(n<2){ preArr=tot; postArr=tot; }
   else { const preC=Math.min(7,Math.floor(n/2)); const postC=Math.min(7,n-preC); preArr=tot.slice(0,preC); postArr=tot.slice(n-postC); }
   const agg=arr=>{ let r=0,f=0,i=0,v=0,dau=0,deu=0; arr.forEach(x=>{r+=x.r;f+=x.f;i+=x.i;v+=x.v;dau+=x.dau;deu+=x.deu;}); const c=arr.length||1;
-    return { reqAvg:r/c,revAvg:v/c,fillPct:r>0?f/r*100:NaN,ecpm:i>0?v/i*1000:NaN, revPerDau:dau>0?v/dau:NaN, revPerDeu:deu>0?v/deu:NaN }; };
+    return { reqAvg:r/c,revAvg:v/c,fillPct:r>0?f/r*100:NaN,ecpm:i>0?v/i*1000:NaN, revPerDau:dau>0?v/dau:NaN, revPerDeu:deu>0?v/deu:NaN, impPerDau:dau>0?i/dau:NaN }; };
   const A=agg(preArr),B=agg(postArr);
   const lbl=arr=>arr.length?`${arr[0].date} ~ ${arr[arr.length-1].date}（${arr.length}天）`:"—";
   return { n, req:{pre:A.reqAvg,post:B.reqAvg}, rev:{pre:A.revAvg,post:B.revAvg},
     fill:{pre:A.fillPct,post:B.fillPct}, ecpm:{pre:A.ecpm,post:B.ecpm},
     rpd:{pre:A.revPerDau,post:B.revPerDau}, rpe:{pre:A.revPerDeu,post:B.revPerDeu},
+    ipd:{pre:A.impPerDau,post:B.impPerDau},
     preLabel:lbl(preArr), postLabel:lbl(postArr) };
 }
-function classify(vd,rd,qd){
-  const vpmWin=vd>SIG, vpmFlat=Math.abs(vd)<=SIG;
-  const revUp=rd>SIG, revFlat=Math.abs(rd)<=SIG, revDown=rd<-SIG;
-  const reqDrop=qd<=-0.30;
-  if(vpmWin&&revUp) return {cls:"A",tag:"A",title:"完美通关，准备全量",lis:["实验组榨干请求效率（VPM&gt;对照）且大盘溢价，盘子变大。","<strong>决策：通过测试，逐步扩大该实验组灰度比例。</strong>"]};
-  if(vpmWin&&revFlat&&reqDrop) return {cls:"B",tag:"B",title:"防守成功，技术降本",lis:["收益持平但大盘总请求降约30%+，算力/带宽大幅节省。","<strong>决策：符合战略预期，可以全量。</strong>"]};
-  if(vpmFlat&&revDown) return {cls:"C",tag:"C",title:"误杀现金牛，恶性循环",lis:["VPM 与对照拉不开差距且大盘总收益下跌，疑似低流量死锁或词表不准。","<strong>决策：立刻人工熔断，调高 Base_Rate 兜底或退回回测重校准。</strong>"]};
-  return {cls:"none",tag:"none",title:"混合信号 · 需人工研判",lis:[`VPM vs 对照 ${(vd*100).toFixed(1)}%；大盘收益 ${(rd*100).toFixed(1)}%；大盘请求 ${(qd*100).toFixed(1)}%`,"未命中 A/B/C 标准组合，建议结合显著性检验人工判断。"]};
+// 大盘前后对比四场景研判（基于 收益/DAU、预估eCPM、展示/DAU 三指标）
+// 输入：rdpd=收益/DAU Δ， rEcpm=预估eCPM Δ， rIpd=展示/DAU Δ
+function classifyOverall(rdpd, rEcpm, rIpd){
+  const F=FLAT_THR, S=SIG, K=CRASH_THR;
+  const ok=isFinite(rdpd)&&isFinite(rEcpm);
+  if(!ok) return {cls:"none",tag:"none",title:"数据不足",
+    lis:["收益/DAU 或 预估eCPM 数据缺失，无法研判。"],
+    suggestion:"补充 DAU/展示/收益数据（CSV 须含 DAU 列）后自动判定"};
+  // 场景一：完美通关 — 收益/DAU 持平或↑ 且 eCPM ↑
+  if(rdpd>=-F && rEcpm>F){
+    return {cls:"A",tag:"A",title:"场景一 · 完美通关：降本+提效+增收",
+      lis:["收益/DAU "+(rdpd>F?"<strong>上涨</strong>":"<strong>持平</strong>")+"，预估 eCPM <strong>上涨</strong>。",
+        "广告平台因流量纯净给予溢价红利，RPR 词表精准砍掉无效请求。",
+        "<strong>决策：通过探测，分阶段扩大灰度（10% → 30% → 50%）。</strong>"],
+      suggestion:"通过探测，分阶段扩大灰度（10% → 30% → 50%）"};
+  }
+  // 场景二：技术性通关 — 收益/DAU 持平 且 eCPM 持平/↑ 且 展示/DAU 持平/↑
+  if(Math.abs(rdpd)<=F && rEcpm>=-F && (!isFinite(rIpd) || rIpd>=-F)){
+    return {cls:"B",tag:"B",title:"场景二 · 技术性通关：纯粹降本瘦身",
+      lis:["收益/DAU <strong>持平</strong>（±"+(F*100)+"% 以内），预估 eCPM 稳定或微涨，展示/DAU 稳定或上涨。",
+        "用更少的资源（请求/算力/带宽/用户打扰）换到同等收益，收益质量（利润率）变高。",
+        "<strong>决策：实验成功，分阶段扩大灰度（10% → 30% → 50%）。</strong>"],
+      suggestion:"实验成功，分阶段扩大灰度（10% → 30% → 50%）"};
+  }
+  // 场景三：恶性循环 — 收益/DAU 显著下跌 且 展示/DAU 断崖下跌 且 eCPM 下跌或滞后持平
+  if(rdpd<-S && isFinite(rIpd)&&rIpd<-K && rEcpm<=F){
+    return {cls:"C",tag:"C",title:"场景三 · 警惕！陷入恶性循环（流量干涸）",
+      lis:["收益/DAU <strong>显著下跌</strong>（&lt; -"+(S*100)+"%），展示/DAU <strong>断崖下跌</strong>（&lt; -"+(K*100)+"%），eCPM 下跌或滞后持平。",
+        "过滤过激，平台『数据饥饿』无法填充，DEU 拿不到广告，人均收益坍塌。",
+        "<strong>决策：立刻人工熔断，暂停实验！提高 Base_Rate 兜底值或加入低流量广告位硬性免过滤护栏。</strong>"],
+      suggestion:"立即人工熔断暂停实验；提高 Base_Rate 兜底或加入低流量广告位硬性免过滤护栏"};
+  }
+  // 场景四：价格截胡 — 收益/DAU 下跌 且 展示/DAU 上涨 且 eCPM 大跌
+  if(rdpd<-F && isFinite(rIpd)&&rIpd>F && rEcpm<-K){
+    return {cls:"D",tag:"D",title:"场景四 · 价格截胡：策略畸变（赚吆喝不赚钱）",
+      lis:["收益/DAU <strong>下跌</strong>，展示/DAU <strong>升高</strong>，预估 eCPM <strong>大跌</strong>（&lt; -"+(K*100)+"%）。",
+        "可能误过滤高价广告源触发特征，流量被逼向低底价兜底层；用户看广告变多，ARPU 反而崩盘。",
+        "<strong>决策：停止实验，排查 Waterfall 配置或词表方向。</strong>"],
+      suggestion:"停止实验，排查 Waterfall 配置或词表方向"};
+  }
+  return {cls:"none",tag:"none",title:"混合信号 · 需人工研判",
+    lis:[`收益/DAU Δ ${(rdpd*100).toFixed(1)}%、预估 eCPM Δ ${(rEcpm*100).toFixed(1)}%、展示/DAU Δ ${isFinite(rIpd)?(rIpd*100).toFixed(1)+"%":"—"}`,"未命中四场景标准组合，建议结合显著性检验与业务上下文人工研判。"],
+    suggestion:"信号混合，结合显著性检验与业务上下文人工研判"};
 }
 
 /* ---------- per-experiment HTML builders ---------- */
@@ -378,82 +419,74 @@ function spillHTML(e,sp){
    <div class="table-wrap"><table><thead><tr><th style="text-align:left">评估指标（Unit 大盘总计 = ΣABCD）</th><th>数据期前段均值</th><th>数据期后段均值</th><th>实际变化</th><th>溢出价值判定</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function verdictHTML(e,der,t,rm,sp){
-  const rd=relDelta(sp.rev.post,sp.rev.pre), qd=relDelta(sp.req.post,sp.req.pre);
+  // 大盘前后三指标
+  const rdpd=relDelta(sp.rpd.post, sp.rpd.pre);   // 收益/DAU Δ
+  const rEcpm=relDelta(sp.ecpm.post, sp.ecpm.pre); // 预估eCPM Δ
+  const rIpd=relDelta(sp.ipd.post, sp.ipd.pre);    // 展示/DAU Δ
   const cVpm=rm.cDer.vpm;
+  // KPI：大盘三指标卡片 + 实验组/对照VPM 参考
+  const kpiCell=(label, pre, post, kind, gd)=>{
+    const di=deltaInfo(post,pre,gd);
+    const cell=v=>!isFinite(v)?"—":(kind==="ratio"?v.toFixed(6):kind==="pct"?v.toFixed(2)+"%":fmt(v,2));
+    return `<div class="kpi" style="border-color:#2b6cb0"><div class="k-label">${label}（大盘前→后）</div><div class="k-val" style="font-size:15px">${cell(pre)} → ${cell(post)}</div>${di.txt?`<div class="k-sub"><span class="${di.cls}">${di.txt}</span></div>`:""}</div>`;
+  };
   let kpi="";
-  rm.present.forEach(gk=>{
-    const v=der[gk].vpm, isT=rm.treat.includes(gk);
-    const w=grpWeight(e,gk); const wt=w!=null?` ${w}%`:"";
-    let sub="";
-    if(isT && rm.ctrl.length){ const di=deltaInfo(v,cVpm,"up"); if(di.txt) sub=`<div class="k-sub"><span class="${di.cls}">vs对照 ${di.txt}</span></div>`; }
-    kpi+=`<div class="kpi"><div class="k-label">${gk}组 ${isT?"实验组(B·RPR)":"对照组"}${wt} · VPM</div><div class="k-val">${isFinite(v)?fmt(v,2):"—"}</div>${sub}</div>`;
-  });
-  kpi+=`<div class="kpi" style="border-color:#3182ce"><div class="k-label">对照组合计 (${rm.ctrl.join("+")||"—"}) · VPM 基准</div><div class="k-val">${isFinite(cVpm)?fmt(cVpm,2):"—"}</div><div class="k-sub">大盘收益Δ ${isFinite(rd)?(rd>=0?"+":"")+(rd*100).toFixed(1)+"%":"—"}｜大盘请求Δ ${isFinite(qd)?(qd>=0?"+":"")+(qd*100).toFixed(1)+"%":"—"}</div></div>`;
+  kpi+=kpiCell("收益/DAU", sp.rpd.pre, sp.rpd.post, "ratio", "up");
+  kpi+=kpiCell("预估 eCPM", sp.ecpm.pre, sp.ecpm.post, "rev", "up");
+  kpi+=kpiCell("展示/DAU", sp.ipd.pre, sp.ipd.post, "ratio", "up");
+  // 实验组 vs 对照 (informational)
+  if(rm.treat.length && rm.ctrl.length && isFinite(cVpm) && cVpm>0){
+    const v=der.B?der.B.vpm:NaN; const di=isFinite(v)?deltaInfo(v,cVpm,"up"):{txt:"",cls:"neu"};
+    kpi+=`<div class="kpi"><div class="k-label">参考：B(RPR) vs 对照合计 VPM</div><div class="k-val" style="font-size:15px">${isFinite(v)?fmt(v,2):"—"} vs ${fmt(cVpm,2)}</div>${di.txt?`<div class="k-sub"><span class="${di.cls}">${di.txt}</span></div>`:""}</div>`;
+  }
+  // 四场景研判
+  const hasSpill=sp.n>=2;
   let box="", reco="";
-  if(!rm.treat.length){
-    box=`<div class="verdict-card none"><span class="verdict-tag none">无实验组</span><h3>B 组（RPR 实验组）暂无数据</h3><p>B 组已固定为 RPR 实验组；A/C/D 自动作对照。</p></div>`;
-  } else if(!rm.ctrl.length || !isFinite(cVpm) || cVpm<=0){
-    box=`<div class="verdict-card none"><span class="verdict-tag none">无对照组</span><h3>缺少有效对照组数据</h3><p>需 A/C/D 中至少一个对照组录入数据。</p></div>`;
+  if(!hasSpill){
+    box=`<div class="verdict-card none"><span class="verdict-tag none">数据不足</span><h3>等待大盘窗口形成</h3><p>需 ≥2 天带日期的大盘数据（A+B+C+D 日合计）才能给出场景研判。</p></div>`;
   } else {
-    const hasSpill=sp.n>=2; let best=null;
-    rm.treat.forEach(gk=>{
-      const vd=relDelta(der[gk].vpm, cVpm);
-      const lbl=(e.info&&e.info["i_lbl"+gk])||GROUP_DESC[gk];
-      if(!hasSpill){
-        box+=`<div class="verdict-card none"><span class="verdict-tag none">${gk} 实验组</span><h3>${gk} · ${esc(lbl)}：VPM vs 对照合计 ${(vd*100).toFixed(1)}%</h3><ul><li>内部效率已可比较；大盘溢出需 ≥2 天带日期数据后给完整 A/B/C 判定。</li></ul></div>`;
-      } else {
-        const r=classify(vd,rd,qd);
-        box+=`<div class="verdict-card ${r.cls}"><span class="verdict-tag ${r.tag}">${gk} 实验组 · ${r.tag==="none"?"研判":"情况 "+r.tag}</span><h3>${gk} · ${esc(lbl)}：${r.title}（VPM vs 对照 ${(vd*100).toFixed(1)}%）</h3><ul>${r.lis.map(x=>`<li>${x}</li>`).join("")}</ul></div>`;
-      }
-      if(vd>SIG && (!best||vd>best.vd)) best={gk,vd,lbl};
-    });
-    reco = best
-      ? `<div class="reco">🏁 <strong>推荐实验组：${best.gk} 组（${esc(best.lbl)}）</strong> —— VPM 显著跑赢对照组合计（+${(best.vd*100).toFixed(1)}%），建议优先以该组参数推进灰度（仍需结合大盘溢出与显著性检验）。</div>`
-      : `<div class="reco">⚠️ B 实验组 VPM 未显著跑赢对照组合计（阈值 ${(SIG*100)}%）。当前策略未跑出效率优势，建议检查词表/调整 Base_Rate 或继续观察。</div>`;
+    const r=classifyOverall(rdpd, rEcpm, rIpd);
+    box=`<div class="verdict-card ${r.cls}"><span class="verdict-tag ${r.tag}">${r.tag==="none"?"研判":"场景 "+r.tag}</span><h3>${r.title}</h3><ul>${r.lis.map(x=>`<li>${x}</li>`).join("")}</ul></div>`;
+    reco = `<div class="reco">🏁 <strong>下阶段建议：${r.suggestion}</strong></div>`;
   }
   return `<div class="kpi-row">${kpi}</div>${box}${reco}`;
 }
 function expVerdict(e){
-  const t=totalsOf(e); const rm=roleModelOf(e,t); const sp=computeSpillOf(e);
-  const der={}; GROUPS.forEach(g=>der[g]=derived(t[g]));
-  const cVpm=rm.cDer.vpm;
-  const r={ name:expLabel(e), placement:(e.info&&e.info.i_placement)||"", bVpm:der.B?der.B.vpm:NaN, cVpm,
-    vd:NaN, rd:relDelta(sp.rev.post,sp.rev.pre), qd:relDelta(sp.req.post,sp.req.pre),
-    tag:"none", title:"数据不足", suggestion:"—", n:sp.n };
-  if(!rm.treat.length){ r.title="无 B 实验组数据"; r.suggestion="导入/录入 B 组数据"; return r; }
-  if(!rm.ctrl.length || !isFinite(cVpm) || cVpm<=0){ r.title="无对照组数据"; r.suggestion="补充 A/C/D 任一对照组数据"; return r; }
-  r.vd=relDelta(der.B.vpm, cVpm);
-  if(sp.n<2){ r.tag="none"; r.title="待大盘数据"; r.suggestion="继续积累 ≥2 天带日期数据后自动判定"; return r; }
-  const c=classify(r.vd, r.rd, r.qd);
-  r.tag=c.tag; r.title=c.title;
-  r.suggestion = c.tag==="A" ? "通过测试，逐步扩大 B 组灰度比例"
-    : c.tag==="B" ? "收益持平但显著降本，可全量"
-    : c.tag==="C" ? "立即熔断 B；调高 Base_Rate 兜底或退回回测重校准词表"
-    : "信号混合，结合显著性检验人工研判";
+  const sp=computeSpillOf(e);
+  const r={
+    name:expLabel(e), placement:(e.info&&e.info.i_placement)||"",
+    rdpd:relDelta(sp.rpd.post, sp.rpd.pre),   // 收益/DAU Δ
+    rEcpm:relDelta(sp.ecpm.post, sp.ecpm.pre), // 预估eCPM Δ
+    rIpd:relDelta(sp.ipd.post, sp.ipd.pre),   // 展示/DAU Δ
+    n:sp.n, tag:"none", title:"数据不足", suggestion:"—"
+  };
+  if(sp.n<2){ r.title="待大盘数据"; r.suggestion="继续积累 ≥2 天带日期数据后自动判定"; return r; }
+  const c=classifyOverall(r.rdpd, r.rEcpm, r.rIpd);
+  r.tag=c.tag; r.title=c.title; r.suggestion=c.suggestion;
   return r;
 }
 function summaryBoardHTML(){
   if(!state.experiments.length) return "<p style='color:#a0aec0'>暂无实验</p>";
+  const arrow=(x,thresh)=>{ if(!isFinite(x)) return "—"; if(Math.abs(x)<=thresh) return "➡️"; return x>0?"↗":"↘"; };
   const pctTxt=x=> isFinite(x)?((x>=0?"+":"")+(x*100).toFixed(1)+"%"):"—";
-  const clsOf=(x,good)=> !isFinite(x)?"neu":(Math.abs(x)<SIG?"neu":((x>0)===good?"pos":"neg"));
+  // 颜色：>FLAT 上涨=good；<-FLAT 下跌=bad；其余中性
+  const clsUp=(x)=>!isFinite(x)?"neu":(x>FLAT_THR?"pos":x<-FLAT_THR?"neg":"neu");
   const rows=state.experiments.map(e=>{
     const r=expVerdict(e); const dd=expDisplay(e);
-    const tagHtml=`<span class="verdict-tag ${r.tag}">${r.tag==="none"?r.title:"情况 "+r.tag+" · "+r.title}</span>`;
+    const tagHtml=`<span class="verdict-tag ${r.tag}">${r.tag==="none"?r.title:"场景 "+r.tag+" · "+r.title.replace(/^场景[一二三四] · /,"")}</span>`;
     return `<tr>
       <td class="metric-name"><div style="font-weight:700">${dd.top}</div>${dd.bot?`<div style="font-size:11.5px;color:#718096;margin-top:2px;font-weight:500">${dd.bot}</div>`:""}</td>
-      <td class="calc">${isFinite(r.bVpm)?fmt(r.bVpm,3):"—"}</td>
-      <td class="calc muted">${isFinite(r.cVpm)?fmt(r.cVpm,3):"—"}</td>
-      <td class="calc"><span class="${clsOf(r.vd,true)}">${pctTxt(r.vd)}</span></td>
-      <td class="calc"><span class="${clsOf(r.rd,true)}">${pctTxt(r.rd)}</span></td>
-      <td class="calc"><span class="${clsOf(r.qd,false)}">${pctTxt(r.qd)}</span></td>
+      <td class="calc"><span class="${clsUp(r.rdpd)}">${arrow(r.rdpd,FLAT_THR)} ${pctTxt(r.rdpd)}</span></td>
+      <td class="calc"><span class="${clsUp(r.rEcpm)}">${arrow(r.rEcpm,FLAT_THR)} ${pctTxt(r.rEcpm)}</span></td>
+      <td class="calc"><span class="${clsUp(r.rIpd)}">${arrow(r.rIpd,FLAT_THR)} ${pctTxt(r.rIpd)}</span></td>
       <td>${tagHtml}</td>
       <td style="text-align:left;font-size:12.5px">${r.suggestion}</td>
     </tr>`;
   }).join("");
   return `<div class="table-wrap"><table>
-    <thead><tr><th style="text-align:left">广告位（实验）</th><th>B实验组 VPM</th><th>对照合计 VPM</th><th>VPM vs对照</th><th>大盘收益Δ</th><th>大盘请求Δ</th><th>研判</th><th style="text-align:left">建议</th></tr></thead>
+    <thead><tr><th style="text-align:left">广告位（实验）</th><th>收益/DAU Δ</th><th>预估 eCPM Δ</th><th>展示/DAU Δ</th><th>研判（大盘前→后）</th><th style="text-align:left">建议</th></tr></thead>
     <tbody>${rows}</tbody></table></div>
-    <div class="hint">研判规则：情况A=VPM跑赢且大盘收益涨；情况B=VPM跑赢且收益持平但大盘请求↓约30%；情况C=VPM拉不开且大盘收益跌；其余为混合信号。显著阈值 ±${SIG*100}%。</div>`;
+    <div class="hint">研判规则（大盘前后对比，A+B+C+D 混合）：<strong>场景A 完美通关</strong>=收益/DAU 持平或↑ + eCPM↑；<strong>场景B 技术性通关</strong>=收益/DAU 持平 + eCPM 持平/↑ + 展示/DAU 持平/↑；<strong>场景C 恶性循环</strong>=收益/DAU 显著↓ + 展示/DAU 断崖↓ + eCPM↓/滞后；<strong>场景D 价格截胡</strong>=收益/DAU↓ + 展示/DAU↑ + eCPM大跌。阈值：持平 ±${FLAT_THR*100}%、显著 ${SIG*100}%、断崖/大跌 ${CRASH_THR*100}%。</div>`;
 }
 function overviewCardHTML(e){
   const t=totalsOf(e); const der={}; GROUPS.forEach(g=>der[g]=derived(t[g]));
@@ -469,7 +502,7 @@ function overviewCardHTML(e){
     </div>
     <h3>周期汇总评估表（自动计算）</h3>${summaryHTML(e,t,der,rm)}
     <h3>大盘溢出效应对比（A+B+C+D 日合计 · 自动）</h3>${spillHTML(e,sp)}
-    <h3>结论判定（B 实验组 vs 对照组合计）</h3>${verdictHTML(e,der,t,rm,sp)}
+    <h3>结论判定（大盘前→后 四场景研判）</h3>${verdictHTML(e,der,t,rm,sp)}
   </section>`;
 }
 function infoFormHTML(e){
