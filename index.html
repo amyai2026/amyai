@@ -230,9 +230,10 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
-const APP_VERSION = "v1.11.6";
+const APP_VERSION = "v1.11.7";
 const BUILD_DATE = "2026-05-20";
 const CHANGELOG = [
+  ["v1.11.7","2026-05-20","场景C 简化为单条件『收益/DAU 显著下降(<-3%)』；展示/DAU 断崖与 eCPM 下降仅作为详情描述附注，不再作为必要条件。C 优先级高于 D，因此 D 只在『收益/DAU 下降未显著(-0.5%~-3%) + eCPM 显著下降』时命中"],
   ["v1.11.6","2026-05-20","场景D 触发门槛由『eCPM 大跌(-10%)』放宽为『eCPM 显著下降(-3%)』；首页阈值说明统一为『显著 ±3%』"],
   ["v1.11.5","2026-05-20","场景D 简化为『收益/DAU 下降 + eCPM 大跌』，不再要求 展示/DAU 上涨（详细描述会自动标注实际 展示/DAU 方向）"],
   ["v1.11.4","2026-05-20","场景B 简化为『收益/DAU 持平』（不再要求 eCPM 与 展示/DAU 同时持平/上涨；A 优先吃掉持平+eCPM上涨的完美通关情况）"],
@@ -456,11 +457,13 @@ function classifyOverall(rdpd, rEcpm, rIpd){
         "<strong>决策：实验成功，分阶段扩大灰度（10% → 30% → 50%）。</strong>"],
       suggestion:"实验成功，分阶段扩大灰度（10% → 30% → 50%）"};
   }
-  // 场景三：恶性循环 — 收益/DAU 显著下降 + 展示/DAU 断崖下降 + eCPM 下降
-  if(rdpd<-S && isFinite(rIpd)&&rIpd<-K && rEcpm<-F){
-    return {cls:"C",tag:"C",title:"场景三 · 警惕！陷入恶性循环（流量干涸）",
-      lis:["收益/DAU <strong>显著下降</strong>（&lt; -"+(S*100)+"%），展示/DAU <strong>断崖下降</strong>（&lt; -"+(K*100)+"%），预估 eCPM <strong>下降</strong>（&lt; -"+(F*100)+"%）。",
-        "过滤过激，平台『数据饥饿』无法填充，DEU 拿不到广告，人均收益坍塌。",
+  // 场景三：恶性循环 — 收益/DAU 显著下降（单条件）
+  if(rdpd<-S){
+    const ipdNote = isFinite(rIpd) && rIpd<-K ? `，展示/DAU <strong>断崖下降</strong>（&lt; -${K*100}%）` : "";
+    const ecpmNote = rEcpm<-F ? `，预估 eCPM <strong>下降</strong>` : (rEcpm>F ? "，预估 eCPM 上涨但拉不动 ARPU" : "");
+    return {cls:"C",tag:"C",title:"场景三 · 警惕！陷入恶性循环",
+      lis:["收益/DAU <strong>显著下降</strong>（&lt; -"+(S*100)+"%）"+ipdNote+ecpmNote+"。",
+        "ARPU 已经显著塌陷；典型成因：过滤过激导致流量干涸 / 数据饥饿、平台填充与单价同步走低、DEU 无广告可看。",
         "<strong>决策：立刻人工熔断，暂停实验！提高 Base_Rate 兜底值或加入低流量广告位硬性免过滤护栏。</strong>"],
       suggestion:"立即人工熔断暂停实验；提高 Base_Rate 兜底或加入低流量广告位硬性免过滤护栏"};
   }
@@ -608,7 +611,7 @@ function summaryBoardHTML(){
   return `<div class="table-wrap"><table>
     <thead><tr><th style="text-align:left">广告位（实验）</th><th>收益/DAU Δ</th><th>预估 eCPM Δ</th><th>展示/DAU Δ</th><th>研判（大盘前→后）</th><th style="text-align:left">建议</th></tr></thead>
     <tbody>${rows}</tbody></table></div>
-    <div class="hint">研判规则（大盘前后对比，A+B+C+D 混合）：<strong>场景A 完美通关</strong>=收益/DAU 上涨；或 收益/DAU 持平 + eCPM 上涨；<strong>场景B 技术性通关</strong>=收益/DAU 持平（场景A『持平+eCPM上涨』之外的其它持平态）；<strong>场景C 恶性循环</strong>=收益/DAU 显著下降 + 展示/DAU 断崖下降 + eCPM 下降；<strong>场景D 价格截胡</strong>=收益/DAU 下降 + eCPM 显著下降。阈值：上涨 &gt;+${FLAT_THR*100}%、下降 &lt;-${FLAT_THR*100}%、持平 ±${FLAT_THR*100}%、显著 ±${SIG*100}%、断崖/大跌 ${CRASH_THR*100}%。</div>`;
+    <div class="hint">研判规则（大盘前后对比，A+B+C+D 混合）：<strong>场景A 完美通关</strong>=收益/DAU 上涨；或 收益/DAU 持平 + eCPM 上涨；<strong>场景B 技术性通关</strong>=收益/DAU 持平（场景A『持平+eCPM上涨』之外的其它持平态）；<strong>场景C 恶性循环</strong>=收益/DAU 显著下降；<strong>场景D 价格截胡</strong>=收益/DAU 下降 + eCPM 显著下降。阈值：上涨 &gt;+${FLAT_THR*100}%、下降 &lt;-${FLAT_THR*100}%、持平 ±${FLAT_THR*100}%、显著 ±${SIG*100}%、断崖/大跌 ${CRASH_THR*100}%。</div>`;
 }
 function overviewCardHTML(e){
   const t=totalsOf(e); const der={}; GROUPS.forEach(g=>der[g]=derived(t[g]));
