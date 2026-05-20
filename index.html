@@ -230,9 +230,10 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
-const APP_VERSION = "v1.11.0";
+const APP_VERSION = "v1.11.1";
 const BUILD_DATE = "2026-05-20";
 const CHANGELOG = [
+  ["v1.11.1","2026-05-20","研判规则阈值收紧：持平 ±0.5%（原 ±2%）、显著 3%（原 5%）、断崖/大跌 10%（原 15%），更严格地识别真正的趋势变化"],
   ["v1.11.0","2026-05-20","新增导出 JPG/PNG/PDF：工具栏选择「导出范围」（① 结果总览 / ② 全部实验同屏对比 / ③ 数据录入与详情 / 全部页面）后点对应格式按钮即可下载。PDF 自动按 A4 分页。依赖 html2canvas + jsPDF（jsdelivr CDN 加载）"],
   ["v1.10.0","2026-05-20","结果总览拆为独立首页（仅研判汇总预览），原『全部实验同屏对比』成为第②页（每实验完整 3 模块）；汇总表与对比页卡片标题统一展示 广告位名称/UUID/广告样式/系统平台/应用名称/应用UUID/开发者ID/开发者名称；首页字号收紧至 10.5px 节省纵向空间"],
   ["v1.9.0","2026-05-20","大盘溢出对比扩展：『广告平台真实填充率%』改名为『流量填充率』、『大盘整体真实eCPM』改名为『大盘eCPM』；新增 大盘询价次数(日均)/询价响应率/询价响应eCPM/展示/DAU/展示/DEU 五项指标"],
@@ -251,9 +252,9 @@ const CHANGELOG = [
 ];
 const LS_KEY = "rpr_ab_experiment_v2";
 const LS_KEY_OLD = "rpr_ab_experiment_v1";
-const SIG = 0.05;          // 显著阈值 5%
-const FLAT_THR = 0.02;     // 持平阈值 ±2%
-const CRASH_THR = 0.15;    // 断崖/大跌阈值 15%
+const SIG = 0.03;          // 显著阈值 3%
+const FLAT_THR = 0.005;    // 持平阈值 ±0.5%
+const CRASH_THR = 0.10;    // 断崖/大跌阈值 10%
 const GROUPS = ["A","B","C","D"];
 const GROUP_DESC = {A:"对照(不干预)",B:"变体B",C:"变体C",D:"变体D"};
 const VARIANTS = ["B","C","D"];
