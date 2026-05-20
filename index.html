@@ -207,9 +207,10 @@
 </div>
 
 <script>
-const APP_VERSION = "v1.8.1";
+const APP_VERSION = "v1.9.0";
 const BUILD_DATE = "2026-05-20";
 const CHANGELOG = [
+  ["v1.9.0","2026-05-20","大盘溢出对比扩展：『广告平台真实填充率%』改名为『流量填充率』、『大盘整体真实eCPM』改名为『大盘eCPM』；新增 大盘询价次数(日均)/询价响应率/询价响应eCPM/展示/DAU/展示/DEU 五项指标"],
   ["v1.8.1","2026-05-20","汇总表「广告位（实验）」列扩展为多行：广告位名称(加粗) + UUID/系统平台/应用名/应用UUID/开发者ID/开发者名称（CSV 有对应列时自动识别）；周期汇总评估表新增 总询价数、询价响应率、询价响应eCPM 三项指标"],
   ["v1.8.0","2026-05-20","研判模型升级为「大盘前→后 四场景决策矩阵」：基于 收益/DAU、预估eCPM、展示/DAU 三指标判定 场景A完美通关/B技术性通关/C恶性循环/D价格截胡；首页汇总表与每实验判定卡同步重写，建议与场景一一对应"],
   ["v1.7.1","2026-05-19","汇总表与卡片标题改为两行：第1行=广告位名称，第2行=广告位ID/实验ID（无名称列时显示『未命名广告位 · 实验ID xxxx』）"],
@@ -349,19 +350,44 @@ function deltaInfo(b,a,goodDir){
 function fmtKind(k,x){ return k==="pct"?pct(x):k==="int"?fmt(x):fmt(x,2); }
 function computeSpillOf(e){
   const days=((e&&e.days)||[]).filter(d=>d.date).slice().sort((a,b)=>a.date.localeCompare(b.date));
-  const tot=days.map(d=>{ let r=0,f=0,i=0,v=0,dau=0,deu=0; GROUPS.forEach(g=>{const c=d[g]||{}; r+=num(c.r);f+=num(c.f);i+=num(c.i);v+=num(c.v);dau+=num(c.dau);deu+=num(c.deu);}); return {date:d.date,r,f,i,v,dau,deu}; });
+  const tot=days.map(d=>{
+    let r=0,f=0,i=0,v=0,dau=0,deu=0,ask=0,resp=0,respWE=0;
+    GROUPS.forEach(g=>{
+      const c=d[g]||{};
+      r+=num(c.r); f+=num(c.f); i+=num(c.i); v+=num(c.v);
+      dau+=num(c.dau); deu+=num(c.deu);
+      const a=num(c.ask), rate=num(c.askRespRate), ae=num(c.askEcpm);
+      const respG=a*rate;
+      ask+=a; resp+=respG; respWE+=respG*ae;
+    });
+    return {date:d.date,r,f,i,v,dau,deu,ask,resp,respWE};
+  });
   const n=tot.length;
   let preArr,postArr;
   if(n<2){ preArr=tot; postArr=tot; }
   else { const preC=Math.min(7,Math.floor(n/2)); const postC=Math.min(7,n-preC); preArr=tot.slice(0,preC); postArr=tot.slice(n-postC); }
-  const agg=arr=>{ let r=0,f=0,i=0,v=0,dau=0,deu=0; arr.forEach(x=>{r+=x.r;f+=x.f;i+=x.i;v+=x.v;dau+=x.dau;deu+=x.deu;}); const c=arr.length||1;
-    return { reqAvg:r/c,revAvg:v/c,fillPct:r>0?f/r*100:NaN,ecpm:i>0?v/i*1000:NaN, revPerDau:dau>0?v/dau:NaN, revPerDeu:deu>0?v/deu:NaN, impPerDau:dau>0?i/dau:NaN }; };
+  const agg=arr=>{
+    let r=0,f=0,i=0,v=0,dau=0,deu=0,ask=0,resp=0,respWE=0;
+    arr.forEach(x=>{r+=x.r;f+=x.f;i+=x.i;v+=x.v;dau+=x.dau;deu+=x.deu;ask+=x.ask;resp+=x.resp;respWE+=x.respWE;});
+    const c=arr.length||1;
+    return {
+      reqAvg:r/c, revAvg:v/c, askAvg:ask/c,
+      fillPct:r>0?f/r*100:NaN,
+      ecpm:i>0?v/i*1000:NaN,
+      revPerDau:dau>0?v/dau:NaN, revPerDeu:deu>0?v/deu:NaN,
+      impPerDau:dau>0?i/dau:NaN, impPerDeu:deu>0?i/deu:NaN,
+      askRespRate:ask>0?resp/ask*100:NaN,   // 单位 %
+      askRespEcpm:resp>0?respWE/resp:NaN
+    };
+  };
   const A=agg(preArr),B=agg(postArr);
   const lbl=arr=>arr.length?`${arr[0].date} ~ ${arr[arr.length-1].date}（${arr.length}天）`:"—";
-  return { n, req:{pre:A.reqAvg,post:B.reqAvg}, rev:{pre:A.revAvg,post:B.revAvg},
+  return { n,
+    req:{pre:A.reqAvg,post:B.reqAvg}, rev:{pre:A.revAvg,post:B.revAvg}, ask:{pre:A.askAvg,post:B.askAvg},
     fill:{pre:A.fillPct,post:B.fillPct}, ecpm:{pre:A.ecpm,post:B.ecpm},
     rpd:{pre:A.revPerDau,post:B.revPerDau}, rpe:{pre:A.revPerDeu,post:B.revPerDeu},
-    ipd:{pre:A.impPerDau,post:B.impPerDau},
+    ipd:{pre:A.impPerDau,post:B.impPerDau}, ipe:{pre:A.impPerDeu,post:B.impPerDeu},
+    askResp:{pre:A.askRespRate,post:B.askRespRate}, askEcpm:{pre:A.askRespEcpm,post:B.askRespEcpm},
     preLabel:lbl(preArr), postLabel:lbl(postArr) };
 }
 // 大盘前后对比四场景研判（基于 收益/DAU、预估eCPM、展示/DAU 三指标）
@@ -452,12 +478,17 @@ function spillHTML(e,sp){
   const cell=(v,kind)=> isFinite(v)?(kind==="pct"?v.toFixed(2)+"%":kind==="int"?fmt(Math.round(v)):kind==="ratio"?v.toFixed(6):fmt(v,2)):"—";
   const dcell=(b,a,gd)=>{ const di=deltaInfo(b,a,gd); return di.txt?`<span class="${di.cls}">${di.txt}</span>`:"—"; };
   const rows=[
-    ["大盘总请求数（日均）",sp.req,"int","down","广告位服务器请求压力下降"],
-    ["广告平台真实填充率 %",sp.fill,"pct","up","平台算法感知流量变好，愿意给填充"],
-    ["大盘整体真实 eCPM",sp.ecpm,"rev","up","<strong>核心红利！</strong>平台算法调高该 Unit 整体出价"],
-    ["大盘总收益（日均）",sp.rev,"rev","up","<strong>最终大决战指标！</strong>证明降本且增效"],
+    ["大盘总请求数（日均）",sp.req,"int","down","Σ流量请求（日均），广告位服务器请求压力"],
+    ["大盘询价次数（日均）",sp.ask,"int","down","Σ询价（日均），bidding 询价侧成本指标"],
+    ["流量填充率",sp.fill,"pct","up","Σ填充÷Σ请求，平台对该流量的填充能力"],
+    ["询价响应率",sp.askResp,"pct","up","Σ响应÷Σ询价，广告源对询价的回应比例"],
+    ["大盘eCPM",sp.ecpm,"rev","up","<strong>核心红利！</strong>Σ收益÷Σ展示×1000，平台对该 Unit 的整体出价"],
+    ["询价响应eCPM",sp.askEcpm,"rev","up","按响应数加权的询价回应价格，反映流量在 bidding 侧的价格"],
+    ["大盘总收益（日均）",sp.rev,"rev","up","<strong>最终大决战指标！</strong>Σ预估收益（日均）"],
     ["预估收益/DAU（大盘总收益÷总DAU）",sp.rpd,"ratio","up","单日活用户产值，越高说明用户变现效率越好"],
     ["预估收益/DEU（大盘总收益÷总DEU）",sp.rpe,"ratio","up","单有效用户产值，越高说明有效用户变现效率越好"],
+    ["展示/DAU（大盘总展示÷总DAU）",sp.ipd,"ratio","up","单日活用户广告曝光数，过低=干涸、过高=畸变"],
+    ["展示/DEU（大盘总展示÷总DEU）",sp.ipe,"ratio","up","单有效用户广告曝光数，反映广告对变现用户的渗透"],
   ].map(([nm,o,k,gd,note])=>`<tr><td class="metric-name">${nm}</td><td class="calc muted">${cell(o.pre,k)}</td><td class="calc muted">${cell(o.post,k)}</td><td class="calc">${dcell(o.post,o.pre,gd)}</td><td style="text-align:left;font-size:12.5px">${note}</td></tr>`).join("");
   return `<div style="font-size:12.5px;color:#4a5568;margin:4px 0 8px">${win}</div>
    <div class="table-wrap"><table><thead><tr><th style="text-align:left">评估指标（Unit 大盘总计 = ΣABCD）</th><th>数据期前段均值</th><th>数据期后段均值</th><th>实际变化</th><th>溢出价值判定</th></tr></thead><tbody>${rows}</tbody></table></div>`;
