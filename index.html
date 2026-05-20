@@ -205,9 +205,10 @@
 </div>
 
 <script>
-const APP_VERSION = "v1.7.0";
+const APP_VERSION = "v1.7.1";
 const BUILD_DATE = "2026-05-19";
 const CHANGELOG = [
+  ["v1.7.1","2026-05-19","汇总表与卡片标题改为两行：第1行=广告位名称，第2行=广告位ID/实验ID（无名称列时显示『未命名广告位 · 实验ID xxxx』）"],
   ["v1.7.0","2026-05-19","实验名称改用「广告位名称（广告位ID）」(CSV 有对应列时自动识别)；大盘溢出新增 预估收益/DAU、预估收益/DEU 两行；首页顶部新增『全部实验研判汇总』预览表并按研判给出建议"],
   ["v1.6.0","2026-05-19","去掉实验下拉筛选，改为「全部实验同屏」：首页按实验逐个展示 周期汇总/大盘溢出/结论判定，可直接对比多个实验ID；第二页为 实验信息登记+逐日明细表+版本日志，新增空白实验在此页"],
   ["v1.5.1","2026-05-19","实验/对照判定写死：B 组固定为 RPR 实验组，A/C/D 一律对照组（不再依赖分组名称含 rpr 关键词）"],
@@ -250,6 +251,25 @@ document.querySelectorAll(".tab-btn").forEach(b=>{
 /* ---------- helpers ---------- */
 function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
 function expLabel(e){ const i=e.info||{}; return (i.i_name||"").trim() || (i.i_placement||"").trim() || "未命名实验"; }
+// 返回展示用的"广告位名称(上) + 广告位ID(下)"两行结构
+function expDisplay(e){
+  const inf=e&&e.info||{};
+  const pn=(inf.__plaName||"").trim();
+  const pid=(inf.__plaId||"").trim();
+  const eid=(inf.__src||"").trim();
+  let top, bot="";
+  if(pn || pid){
+    top = pn || `<span style="color:#a0aec0">未命名广告位</span>`;
+    if(pid) bot = `广告位ID ${esc(pid)}`;
+    if(eid && (!pid || pid!==eid)) bot += (bot?"  ·  ":"") + `实验ID ${esc(eid)}`;
+  } else if(eid){
+    top = `<span style="color:#a0aec0">未命名广告位</span>`;
+    bot = `实验ID ${esc(eid)}`;
+  } else {
+    top = esc(expLabel(e));
+  }
+  return { top, bot };
+}
 function uniqueName(base){
   const names=new Set(state.experiments.map(x=>expLabel(x)));
   if(!names.has(base)) return base;
@@ -417,10 +437,10 @@ function summaryBoardHTML(){
   const pctTxt=x=> isFinite(x)?((x>=0?"+":"")+(x*100).toFixed(1)+"%"):"—";
   const clsOf=(x,good)=> !isFinite(x)?"neu":(Math.abs(x)<SIG?"neu":((x>0)===good?"pos":"neg"));
   const rows=state.experiments.map(e=>{
-    const r=expVerdict(e);
+    const r=expVerdict(e); const dd=expDisplay(e);
     const tagHtml=`<span class="verdict-tag ${r.tag}">${r.tag==="none"?r.title:"情况 "+r.tag+" · "+r.title}</span>`;
     return `<tr>
-      <td class="metric-name">${esc(r.name)}</td>
+      <td class="metric-name"><div style="font-weight:700">${dd.top}</div>${dd.bot?`<div style="font-size:11.5px;color:#718096;margin-top:2px;font-weight:500">${dd.bot}</div>`:""}</td>
       <td class="calc">${isFinite(r.bVpm)?fmt(r.bVpm,3):"—"}</td>
       <td class="calc muted">${isFinite(r.cVpm)?fmt(r.cVpm,3):"—"}</td>
       <td class="calc"><span class="${clsOf(r.vd,true)}">${pctTxt(r.vd)}</span></td>
@@ -440,10 +460,12 @@ function overviewCardHTML(e){
   const rm=roleModelOf(e,t); const sp=computeSpillOf(e);
   const split = (e.info&&e.info.i_split) ? e.info.i_split
     : GROUPS.filter(g=>hasData(t[g])).map(g=>{const w=grpWeight(e,g);return g+(w!=null?`:${w}%`:"");}).join(" | ");
+  const dd=expDisplay(e);
   return `<section style="border:1px solid #e2e8f0;border-radius:10px;padding:16px 18px;margin-bottom:18px;background:#fff">
-    <div style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;border-bottom:2px solid #f0f2f7;padding-bottom:8px;margin-bottom:6px">
-      <span style="font-size:16px;font-weight:700;color:#1a365d">${esc(expLabel(e))}</span>
-      <span style="font-size:12.5px;color:#718096">${e.info&&e.info.i_placement?("广告位 "+esc(e.info.i_placement)+" · "):""}流量分组 ${esc(split)||"—"}</span>
+    <div style="border-bottom:2px solid #f0f2f7;padding-bottom:8px;margin-bottom:6px">
+      <div style="font-size:16px;font-weight:700;color:#1a365d">${dd.top}</div>
+      ${dd.bot?`<div style="font-size:12px;color:#718096;margin-top:2px">${dd.bot}</div>`:""}
+      <div style="font-size:12.5px;color:#718096;margin-top:4px">流量分组 ${esc(split)||"—"}</div>
     </div>
     <h3>周期汇总评估表（自动计算）</h3>${summaryHTML(e,t,der,rm)}
     <h3>大盘溢出效应对比（A+B+C+D 日合计 · 自动）</h3>${spillHTML(e,sp)}
@@ -502,9 +524,13 @@ function dailyTableHTML(e){
    </table></div>`;
 }
 function detailCardHTML(e){
+  const dd=expDisplay(e);
   return `<section style="border:1px solid #e2e8f0;border-left:4px solid #2b6cb0;border-radius:10px;padding:16px 18px;margin-bottom:18px;background:#fff">
-    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #f0f2f7;padding-bottom:8px;margin-bottom:12px">
-      <span style="font-size:16px;font-weight:700;color:#1a365d">${esc(expLabel(e))}</span>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #f0f2f7;padding-bottom:8px;margin-bottom:12px;gap:12px">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:#1a365d">${dd.top}</div>
+        ${dd.bot?`<div style="font-size:12px;color:#718096;margin-top:2px">${dd.bot}</div>`:""}
+      </div>
       <button class="btn btn-danger btn-sm" onclick="delExpE('${e.id}')">删除该实验</button>
     </div>
     <h3>实验信息登记</h3>${infoFormHTML(e)}
@@ -752,10 +778,15 @@ function importRprRaw(rows){
     if(!e){
       let nm = (pn&&pid)?`${pn}（${pid}）` : pn || pid || ("实验ID "+expId);
       e=blankExp(uniqueName(nm)); e.info.i_placement = pid || pn || ("实验ID "+expId);
-      e.info.__src=expId; e.info.__w={}; state.experiments.push(e); byExp[expId]=e; created.push(e);
+      e.info.__src=expId; e.info.__w={}; e.info.__plaName=pn||""; e.info.__plaId=pid||"";
+      state.experiments.push(e); byExp[expId]=e; created.push(e);
     } else if((pn||pid) && /^实验ID /.test(e.info.i_name||"")){
       // 旧记录无广告位信息时，后续行补全名称
       e.info.i_name = (pn&&pid)?`${pn}（${pid}）` : pn || pid; e.info.i_placement = pid || pn || e.info.i_placement;
+      if(pn) e.info.__plaName=pn; if(pid) e.info.__plaId=pid;
+    } else {
+      if(pn && !e.info.__plaName) e.info.__plaName=pn;
+      if(pid && !e.info.__plaId) e.info.__plaId=pid;
     }
     e.info["i_lbl"+gl]=(c[ci.name]||"").trim();
     if(ci.weight>=0){ const wm=(c[ci.weight]||"").match(/[\d.]+/); if(wm){ e.info.__w=e.info.__w||{}; e.info.__w[gl]=parseFloat(wm[0]); } }
