@@ -170,16 +170,24 @@
   </div>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="overview">① 结果总览（首页 · 全部实验同屏）</button>
-    <button class="tab-btn" data-tab="detail">② 数据录入与详情</button>
+    <button class="tab-btn active" data-tab="results">① 结果总览（首页）</button>
+    <button class="tab-btn" data-tab="compare">② 全部实验同屏对比</button>
+    <button class="tab-btn" data-tab="detail">③ 数据录入与详情</button>
     <span class="count-badge" id="expCount" style="align-self:center;margin-left:auto"></span>
   </div>
 
-  <!-- 首页：结果总览（全部实验同屏） -->
-  <section class="panel active" id="tab-overview">
-    <h2>结果总览 · 全部实验同屏对比</h2>
-    <div class="hint"><strong>B 组固定为 RPR 实验组</strong>，A/C/D 一律对照组。下方按实验逐个展示「周期汇总评估 → 大盘溢出效应 → 结论判定」三个模块，无需切换筛选，可直接纵向对比多个广告位实验。原始数据录入/详情在第二页。</div>
-    <div id="overviewList"></div>
+  <!-- 首页：结果总览（仅汇总预览表） -->
+  <section class="panel active" id="tab-results">
+    <h2>结果总览（首页）</h2>
+    <div class="hint"><strong>B 组固定为 RPR 实验组</strong>，A/C/D 一律对照组。本页为研判汇总预览，按实验逐行列出 收益/DAU / eCPM / 展示/DAU 三大盘前后差 + 场景研判 + 建议。需要看每个实验的完整指标看板，请切换「② 全部实验同屏对比」。</div>
+    <div id="resultsList"></div>
+  </section>
+
+  <!-- 第二页：全部实验同屏对比（每个实验完整 3 模块） -->
+  <section class="panel" id="tab-compare">
+    <h2>全部实验同屏对比</h2>
+    <div class="hint">按实验逐个展示「周期汇总评估 → 大盘溢出效应 → 结论判定」三个模块，无需切换筛选，可直接纵向对比多个广告位实验。</div>
+    <div id="compareList"></div>
   </section>
 
   <!-- 第二页：数据录入与详情 -->
@@ -207,9 +215,10 @@
 </div>
 
 <script>
-const APP_VERSION = "v1.9.0";
+const APP_VERSION = "v1.10.0";
 const BUILD_DATE = "2026-05-20";
 const CHANGELOG = [
+  ["v1.10.0","2026-05-20","结果总览拆为独立首页（仅研判汇总预览），原『全部实验同屏对比』成为第②页（每实验完整 3 模块）；汇总表与对比页卡片标题统一展示 广告位名称/UUID/广告样式/系统平台/应用名称/应用UUID/开发者ID/开发者名称；首页字号收紧至 10.5px 节省纵向空间"],
   ["v1.9.0","2026-05-20","大盘溢出对比扩展：『广告平台真实填充率%』改名为『流量填充率』、『大盘整体真实eCPM』改名为『大盘eCPM』；新增 大盘询价次数(日均)/询价响应率/询价响应eCPM/展示/DAU/展示/DEU 五项指标"],
   ["v1.8.1","2026-05-20","汇总表「广告位（实验）」列扩展为多行：广告位名称(加粗) + UUID/系统平台/应用名/应用UUID/开发者ID/开发者名称（CSV 有对应列时自动识别）；周期汇总评估表新增 总询价数、询价响应率、询价响应eCPM 三项指标"],
   ["v1.8.0","2026-05-20","研判模型升级为「大盘前→后 四场景决策矩阵」：基于 收益/DAU、预估eCPM、展示/DAU 三指标判定 场景A完美通关/B技术性通关/C恶性循环/D价格截胡；首页汇总表与每实验判定卡同步重写，建议与场景一一对应"],
@@ -277,11 +286,14 @@ function expDisplay(e){
   }
   return { top, bot };
 }
-// 汇总表第一列的多行展示：广告位名称（加粗）/UUID/系统平台/应用名/应用UUID/开发者ID/开发者名称
-function expDisplayFull(e){
+// 汇总表/对比卡片标题的多行展示：广告位名称(加粗) + UUID/广告样式/系统平台/应用名/应用UUID/开发者ID/开发者名称
+// opts.compact=true → 紧凑模式（首页汇总表用，字号更小）；否则正常模式（对比页卡片用）
+function expDisplayFull(e, opts){
+  opts=opts||{}; const compact=!!opts.compact;
   const inf=e&&e.info||{};
   const pn=(inf.__plaName||"").trim();
   const pUuid=(inf.__plaUuid||"").trim();
+  const adFmt=(inf.__adFormat||"").trim();
   const os=(inf.__os||"").trim();
   const appName=(inf.__appName||"").trim();
   const appUuid=(inf.__appUuid||"").trim();
@@ -291,18 +303,23 @@ function expDisplayFull(e){
   const fallback=(inf.i_name||"").trim();
   // 第1行：广告位名称（加粗，必显）
   const headTop = pn ? esc(pn) : (fallback ? esc(fallback) : `<span style="color:#a0aec0">未命名广告位</span>`);
-  // 后续小字行（按用户给定顺序）
+  // 后续小字行（按用户指定顺序：UUID/广告样式/系统平台/应用名称/应用UUID/开发者ID/开发者名称）
   const lines=[];
   if(pUuid) lines.push(`<span style="color:#718096">广告位UUID</span> ${esc(pUuid)}`);
   else if(eid) lines.push(`<span style="color:#718096">实验ID</span> ${esc(eid)}`);
+  if(adFmt) lines.push(`<span style="color:#718096">广告样式</span> ${esc(adFmt)}`);
   if(os) lines.push(`<span style="color:#718096">系统平台</span> ${esc(os)}`);
   if(appName) lines.push(`<span style="color:#718096">应用名称</span> ${esc(appName)}`);
   if(appUuid) lines.push(`<span style="color:#718096">应用UUID</span> ${esc(appUuid)}`);
   if(devId) lines.push(`<span style="color:#718096">开发者ID</span> ${esc(devId)}`);
   if(devName) lines.push(`<span style="color:#718096">开发者名称</span> ${esc(devName)}`);
-  let out = `<div style="font-weight:700;font-size:13.5px;color:#1a365d">${headTop}</div>`;
+  const fsHead = compact ? "13px" : "15px";
+  const fsSmall = compact ? "10.5px" : "12px";
+  const lhSmall = compact ? "1.35" : "1.55";
+  const mtSmall = compact ? "2px" : "3px";
+  let out = `<div style="font-weight:700;font-size:${fsHead};color:#1a365d;line-height:1.25">${headTop}</div>`;
   if(lines.length){
-    out += `<div style="font-size:11.5px;color:#4a5568;margin-top:3px;line-height:1.7">${lines.join("<br>")}</div>`;
+    out += `<div style="font-size:${fsSmall};color:#4a5568;margin-top:${mtSmall};line-height:${lhSmall}">${lines.join("<br>")}</div>`;
   }
   return out;
 }
@@ -550,7 +567,7 @@ function summaryBoardHTML(){
     const r=expVerdict(e);
     const tagHtml=`<span class="verdict-tag ${r.tag}">${r.tag==="none"?r.title:"场景 "+r.tag+" · "+r.title.replace(/^场景[一二三四] · /,"")}</span>`;
     return `<tr>
-      <td class="metric-name" style="vertical-align:top;min-width:220px">${expDisplayFull(e)}</td>
+      <td class="metric-name" style="vertical-align:top;min-width:220px">${expDisplayFull(e,{compact:true})}</td>
       <td class="calc"><span class="${clsUp(r.rdpd)}">${arrow(r.rdpd,FLAT_THR)} ${pctTxt(r.rdpd)}</span></td>
       <td class="calc"><span class="${clsUp(r.rEcpm)}">${arrow(r.rEcpm,FLAT_THR)} ${pctTxt(r.rEcpm)}</span></td>
       <td class="calc"><span class="${clsUp(r.rIpd)}">${arrow(r.rIpd,FLAT_THR)} ${pctTxt(r.rIpd)}</span></td>
@@ -568,12 +585,10 @@ function overviewCardHTML(e){
   const rm=roleModelOf(e,t); const sp=computeSpillOf(e);
   const split = (e.info&&e.info.i_split) ? e.info.i_split
     : GROUPS.filter(g=>hasData(t[g])).map(g=>{const w=grpWeight(e,g);return g+(w!=null?`:${w}%`:"");}).join(" | ");
-  const dd=expDisplay(e);
   return `<section style="border:1px solid #e2e8f0;border-radius:10px;padding:16px 18px;margin-bottom:18px;background:#fff">
     <div style="border-bottom:2px solid #f0f2f7;padding-bottom:8px;margin-bottom:6px">
-      <div style="font-size:16px;font-weight:700;color:#1a365d">${dd.top}</div>
-      ${dd.bot?`<div style="font-size:12px;color:#718096;margin-top:2px">${dd.bot}</div>`:""}
-      <div style="font-size:12.5px;color:#718096;margin-top:4px">流量分组 ${esc(split)||"—"}</div>
+      ${expDisplayFull(e)}
+      <div style="font-size:12.5px;color:#718096;margin-top:6px">流量分组 ${esc(split)||"—"}</div>
     </div>
     <h3>周期汇总评估表（自动计算）</h3>${summaryHTML(e,t,der,rm)}
     <h3>大盘溢出效应对比（A+B+C+D 日合计 · 自动）</h3>${spillHTML(e,sp)}
@@ -647,13 +662,17 @@ function detailCardHTML(e){
 }
 
 /* ---------- renderers ---------- */
+function renderResults(){
+  const c=document.getElementById("resultsList");
+  if(c) c.innerHTML=`<section style="border:2px solid #2b6cb0;border-radius:10px;padding:16px 18px;background:#f7faff">
+    <h2 style="border:0;margin:0 0 10px;color:#1a365d">📋 全部实验研判汇总（预览）</h2>${summaryBoardHTML()}</section>`;
+}
+function renderCompare(){
+  const c=document.getElementById("compareList");
+  if(c) c.innerHTML=state.experiments.map(overviewCardHTML).join("");
+}
 function renderOverview(){
-  const c=document.getElementById("overviewList");
-  if(c){
-    const board=`<section style="border:2px solid #2b6cb0;border-radius:10px;padding:16px 18px;margin-bottom:20px;background:#f7faff">
-      <h2 style="border:0;margin:0 0 10px;color:#1a365d">📋 全部实验研判汇总（预览）</h2>${summaryBoardHTML()}</section>`;
-    c.innerHTML = board + state.experiments.map(overviewCardHTML).join("");
-  }
+  renderResults(); renderCompare();
   const ec=document.getElementById("expCount"); if(ec) ec.textContent=`共 ${state.experiments.length} 个实验`;
 }
 function renderDetail(){
@@ -869,6 +888,7 @@ function importRprRaw(rows){
     plaName:colIdx(H,["广告位名称","广告位","Placement名称","placement名称"]),
     plaId:colIdx(H,["广告位ID","广告位Id","广告位id","PlacementID","placement_id","placementid"]),
     plaUuid:colIdx(H,["广告位UUID","广告位uuid","placementUUID","placement_uuid"]),
+    adFormat:colIdx(H,["广告样式","样式","广告类型","Format","CreativeFormat","creative_format","ad_format"]),
     os:colIdx(H,["系统平台","操作系统","Platform","平台","OS"]),
     appName:colIdx(H,["应用名称","App名称","App","应用"]),
     appUuid:colIdx(H,["应用UUID","应用uuid","appUUID","app_uuid","应用ID","应用Id"]),
@@ -893,6 +913,7 @@ function importRprRaw(rows){
     const pn = ci.plaName>=0 ? (c[ci.plaName]||"").trim() : "";
     const pid = ci.plaId>=0 ? (c[ci.plaId]||"").trim() : "";
     const pUuid = ci.plaUuid>=0 ? (c[ci.plaUuid]||"").trim() : "";
+    const adFmt = ci.adFormat>=0 ? (c[ci.adFormat]||"").trim() : "";
     const os = ci.os>=0 ? (c[ci.os]||"").trim() : "";
     const appNm = ci.appName>=0 ? (c[ci.appName]||"").trim() : "";
     const appUu = ci.appUuid>=0 ? (c[ci.appUuid]||"").trim() : "";
@@ -903,7 +924,7 @@ function importRprRaw(rows){
       let nm = (pn&&pid)?`${pn}（${pid}）` : pn || pid || ("实验ID "+expId);
       e=blankExp(uniqueName(nm)); e.info.i_placement = pid || pn || ("实验ID "+expId);
       e.info.__src=expId; e.info.__w={}; e.info.__plaName=pn||""; e.info.__plaId=pid||"";
-      e.info.__plaUuid=pUuid||""; e.info.__os=os||""; e.info.__appName=appNm||"";
+      e.info.__plaUuid=pUuid||""; e.info.__adFormat=adFmt||""; e.info.__os=os||""; e.info.__appName=appNm||"";
       e.info.__appUuid=appUu||""; e.info.__devId=devI||""; e.info.__devName=devN||"";
       state.experiments.push(e); byExp[expId]=e; created.push(e);
     } else if((pn||pid) && /^实验ID /.test(e.info.i_name||"")){
@@ -916,6 +937,7 @@ function importRprRaw(rows){
     }
     // 补全广告位扩展字段（首次出现即写入）
     if(pUuid && !e.info.__plaUuid) e.info.__plaUuid=pUuid;
+    if(adFmt && !e.info.__adFormat) e.info.__adFormat=adFmt;
     if(os && !e.info.__os) e.info.__os=os;
     if(appNm && !e.info.__appName) e.info.__appName=appNm;
     if(appUu && !e.info.__appUuid) e.info.__appUuid=appUu;
