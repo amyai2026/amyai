@@ -230,9 +230,10 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
-const APP_VERSION = "v1.11.1";
+const APP_VERSION = "v1.11.2";
 const BUILD_DATE = "2026-05-20";
 const CHANGELOG = [
+  ["v1.11.2","2026-05-20","场景A 规则放宽：收益/DAU 上涨 即判完美通关（不要求 eCPM 同步上涨）；或 收益/DAU 持平 + eCPM 上涨。原规则要求收益/DAU 至少持平 且 eCPM 上涨"],
   ["v1.11.1","2026-05-20","研判规则阈值收紧：持平 ±0.5%（原 ±2%）、显著 3%（原 5%）、断崖/大跌 10%（原 15%），更严格地识别真正的趋势变化"],
   ["v1.11.0","2026-05-20","新增导出 JPG/PNG/PDF：工具栏选择「导出范围」（① 结果总览 / ② 全部实验同屏对比 / ③ 数据录入与详情 / 全部页面）后点对应格式按钮即可下载。PDF 自动按 A4 分页。依赖 html2canvas + jsPDF（jsdelivr CDN 加载）"],
   ["v1.10.0","2026-05-20","结果总览拆为独立首页（仅研判汇总预览），原『全部实验同屏对比』成为第②页（每实验完整 3 模块）；汇总表与对比页卡片标题统一展示 广告位名称/UUID/广告样式/系统平台/应用名称/应用UUID/开发者ID/开发者名称；首页字号收紧至 10.5px 节省纵向空间"],
@@ -432,10 +433,13 @@ function classifyOverall(rdpd, rEcpm, rIpd){
   if(!ok) return {cls:"none",tag:"none",title:"数据不足",
     lis:["收益/DAU 或 预估eCPM 数据缺失，无法研判。"],
     suggestion:"补充 DAU/展示/收益数据（CSV 须含 DAU 列）后自动判定"};
-  // 场景一：完美通关 — 收益/DAU 持平或↑ 且 eCPM ↑
-  if(rdpd>=-F && rEcpm>F){
+  // 场景一：完美通关 — 收益/DAU 上涨；或 收益/DAU 持平 + eCPM 上涨
+  if(rdpd>F || (Math.abs(rdpd)<=F && rEcpm>F)){
+    const desc = rdpd>F
+      ? "收益/DAU <strong>上涨</strong>（>+"+(F*100)+"%）"+(rEcpm>F?"，预估 eCPM 同步<strong>上涨</strong>":"")+"。"
+      : "收益/DAU <strong>持平</strong>（±"+(F*100)+"% 以内），预估 eCPM <strong>上涨</strong>。";
     return {cls:"A",tag:"A",title:"场景一 · 完美通关：降本+提效+增收",
-      lis:["收益/DAU "+(rdpd>F?"<strong>上涨</strong>":"<strong>持平</strong>")+"，预估 eCPM <strong>上涨</strong>。",
+      lis:[desc,
         "广告平台因流量纯净给予溢价红利，RPR 词表精准砍掉无效请求。",
         "<strong>决策：通过探测，分阶段扩大灰度（10% → 30% → 50%）。</strong>"],
       suggestion:"通过探测，分阶段扩大灰度（10% → 30% → 50%）"};
@@ -595,7 +599,7 @@ function summaryBoardHTML(){
   return `<div class="table-wrap"><table>
     <thead><tr><th style="text-align:left">广告位（实验）</th><th>收益/DAU Δ</th><th>预估 eCPM Δ</th><th>展示/DAU Δ</th><th>研判（大盘前→后）</th><th style="text-align:left">建议</th></tr></thead>
     <tbody>${rows}</tbody></table></div>
-    <div class="hint">研判规则（大盘前后对比，A+B+C+D 混合）：<strong>场景A 完美通关</strong>=收益/DAU 持平或↑ + eCPM↑；<strong>场景B 技术性通关</strong>=收益/DAU 持平 + eCPM 持平/↑ + 展示/DAU 持平/↑；<strong>场景C 恶性循环</strong>=收益/DAU 显著↓ + 展示/DAU 断崖↓ + eCPM↓/滞后；<strong>场景D 价格截胡</strong>=收益/DAU↓ + 展示/DAU↑ + eCPM大跌。阈值：持平 ±${FLAT_THR*100}%、显著 ${SIG*100}%、断崖/大跌 ${CRASH_THR*100}%。</div>`;
+    <div class="hint">研判规则（大盘前后对比，A+B+C+D 混合）：<strong>场景A 完美通关</strong>=收益/DAU↑；或 收益/DAU 持平+eCPM↑；<strong>场景B 技术性通关</strong>=收益/DAU 持平 + eCPM 持平/↑ + 展示/DAU 持平/↑；<strong>场景C 恶性循环</strong>=收益/DAU 显著↓ + 展示/DAU 断崖↓ + eCPM↓/滞后；<strong>场景D 价格截胡</strong>=收益/DAU↓ + 展示/DAU↑ + eCPM大跌。阈值：持平 ±${FLAT_THR*100}%、显著 ${SIG*100}%、断崖/大跌 ${CRASH_THR*100}%。</div>`;
 }
 function overviewCardHTML(e){
   const t=totalsOf(e); const der={}; GROUPS.forEach(g=>der[g]=derived(t[g]));
