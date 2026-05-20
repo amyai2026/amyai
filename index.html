@@ -163,7 +163,19 @@
     <input type="file" id="importCsv" accept=".csv" style="display:none" onchange="importCSV(this)">
     <button class="btn btn-ghost btn-sm" onclick="downloadCsvTemplate()">CSV模板</button>
     <button class="btn btn-ghost" onclick="exportCSV()">⬇ 导出明细CSV</button>
-    <button class="btn btn-primary" onclick="window.print()">🖨 打印/PDF</button>
+    <button class="btn btn-primary" onclick="window.print()">🖨 打印</button>
+    <span style="display:inline-flex;align-items:center;gap:4px;padding-left:8px;border-left:1px solid #e2e8f0;margin-left:4px">
+      <span style="font-size:12px;color:#4a5568">导出范围</span>
+      <select id="exportRange" style="padding:6px 8px;border:1px solid #cbd5e0;border-radius:6px;font-size:12.5px;background:#fff">
+        <option value="results">① 结果总览</option>
+        <option value="compare">② 全部实验同屏对比</option>
+        <option value="detail">③ 数据录入与详情</option>
+        <option value="all">全部页面</option>
+      </select>
+      <button class="btn btn-ghost btn-sm" onclick="exportPage('jpg')">📸 JPG</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportPage('png')">🖼 PNG</button>
+      <button class="btn btn-primary btn-sm" onclick="exportPage('pdf')">📄 PDF</button>
+    </span>
     <div class="spacer"></div>
     <span class="save-state" id="saveState">数据自动保存在本浏览器</span>
     <button class="btn btn-danger btn-sm" onclick="clearAll()">清空全部</button>
@@ -214,10 +226,14 @@
   <footer>RPR 过滤策略 A/B/C/D 多广告位实验数据回收工具 · 数据仅保存在本地浏览器，导出 JSON 可批量备份/交接 · 通过 Claude Code 修改源码后重新部署即可更新分享链接</footer>
 </div>
 
+<!-- 截图/PDF 导出依赖（jsdelivr CDN） -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
-const APP_VERSION = "v1.10.0";
+const APP_VERSION = "v1.11.0";
 const BUILD_DATE = "2026-05-20";
 const CHANGELOG = [
+  ["v1.11.0","2026-05-20","新增导出 JPG/PNG/PDF：工具栏选择「导出范围」（① 结果总览 / ② 全部实验同屏对比 / ③ 数据录入与详情 / 全部页面）后点对应格式按钮即可下载。PDF 自动按 A4 分页。依赖 html2canvas + jsPDF（jsdelivr CDN 加载）"],
   ["v1.10.0","2026-05-20","结果总览拆为独立首页（仅研判汇总预览），原『全部实验同屏对比』成为第②页（每实验完整 3 模块）；汇总表与对比页卡片标题统一展示 广告位名称/UUID/广告样式/系统平台/应用名称/应用UUID/开发者ID/开发者名称；首页字号收紧至 10.5px 节省纵向空间"],
   ["v1.9.0","2026-05-20","大盘溢出对比扩展：『广告平台真实填充率%』改名为『流量填充率』、『大盘整体真实eCPM』改名为『大盘eCPM』；新增 大盘询价次数(日均)/询价响应率/询价响应eCPM/展示/DAU/展示/DEU 五项指标"],
   ["v1.8.1","2026-05-20","汇总表「广告位（实验）」列扩展为多行：广告位名称(加粗) + UUID/系统平台/应用名/应用UUID/开发者ID/开发者名称（CSV 有对应列时自动识别）；周期汇总评估表新增 总询价数、询价响应率、询价响应eCPM 三项指标"],
@@ -778,6 +794,93 @@ function exportJSON(){
   a.href=URL.createObjectURL(blob);
   a.download=`RPR实验全部备份_${new Date().toISOString().slice(0,10)}.json`;
   a.click();
+}
+/* ---------- export to JPG / PNG / PDF ---------- */
+async function exportPage(format){
+  const rangeSel=document.getElementById("exportRange");
+  const range = rangeSel ? rangeSel.value : "results";
+  if(typeof html2canvas==="undefined"){ alert("html2canvas 未加载（可能 CDN 被拦截）。请检查网络后刷新重试。"); return; }
+  if(format==="pdf" && (!window.jspdf || !window.jspdf.jsPDF)){ alert("jsPDF 未加载（可能 CDN 被拦截）。请检查网络后刷新重试。"); return; }
+
+  const tip=document.getElementById("saveState"); const oldTip=tip?tip.textContent:"";
+  if(tip){ tip.textContent="⏳ 正在渲染导出…"; }
+
+  // 目标元素 + 临时显示状态恢复
+  const panelMap={results:"tab-results", compare:"tab-compare", detail:"tab-detail"};
+  const labelMap={results:"结果总览", compare:"全部实验对比", detail:"数据录入", all:"全部页面"};
+  const restoreList=[];
+  let target;
+  if(range==="all"){
+    document.querySelectorAll("section.panel").forEach(p=>{
+      restoreList.push([p, p.style.display, p.classList.contains("active")]);
+      p.style.display="block";
+    });
+    target = document.querySelector(".container");
+  } else {
+    target = document.getElementById(panelMap[range]);
+    if(!target){ alert("找不到目标页面"); return; }
+    if(getComputedStyle(target).display==="none"){
+      restoreList.push([target, target.style.display, false]);
+      target.style.display="block";
+    }
+  }
+  const cleanup=()=>{
+    restoreList.forEach(([el, prev, wasActive])=>{ el.style.display = prev || ""; });
+    if(tip){ tip.textContent = oldTip || "数据自动保存在本浏览器"; }
+  };
+
+  try{
+    // 渲染：缩放 2 提升清晰度；windowWidth 取实际宽度避免在窄屏裁切
+    const canvas = await html2canvas(target, {
+      backgroundColor:"#f4f6fb",
+      scale: 2,
+      useCORS:true,
+      logging:false,
+      windowWidth: Math.max(document.documentElement.clientWidth, target.scrollWidth)
+    });
+    const ts=new Date().toISOString().slice(0,10);
+    const base=`RPR实验工具_${labelMap[range]||"export"}_${ts}_${APP_VERSION}`;
+
+    if(format==="jpg" || format==="png"){
+      const mime = format==="jpg" ? "image/jpeg" : "image/png";
+      const ext  = format==="jpg" ? "jpg" : "png";
+      canvas.toBlob(blob=>{
+        if(!blob){ alert("生成图片失败"); cleanup(); return; }
+        const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`${base}.${ext}`; a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+        cleanup();
+      }, mime, format==="jpg" ? 0.92 : 1.0);
+      return;
+    }
+    if(format==="pdf"){
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF("p","pt","a4");
+      const pageW=pdf.internal.pageSize.getWidth();
+      const pageH=pdf.internal.pageSize.getHeight();
+      const M=20;
+      const imgW = pageW - M*2;
+      const ratio = canvas.width / imgW;                // canvas px per pt
+      const sliceHPx = Math.floor((pageH - M*2) * ratio);
+      let yPx=0, pageIdx=0;
+      while(yPx < canvas.height){
+        const h = Math.min(sliceHPx, canvas.height - yPx);
+        const c2 = document.createElement("canvas");
+        c2.width = canvas.width; c2.height = h;
+        c2.getContext("2d").drawImage(canvas, 0, yPx, canvas.width, h, 0, 0, canvas.width, h);
+        const dataUrl = c2.toDataURL("image/jpeg", 0.9);
+        if(pageIdx>0) pdf.addPage();
+        pdf.addImage(dataUrl, "JPEG", M, M, imgW, h / ratio);
+        yPx += h; pageIdx++;
+      }
+      pdf.save(`${base}.pdf`);
+      cleanup();
+      return;
+    }
+  } catch(err){
+    console.error(err);
+    alert("导出失败："+(err && err.message ? err.message : err));
+    cleanup();
+  }
 }
 function importJSON(inp){
   const f=inp.files[0]; if(!f) return;
